@@ -6,6 +6,18 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 /**
+ * Maximum number of retries for API calls
+ * @type {number}
+ */
+const MAX_RETRIES = 3;
+
+/**
+ * Delay between retries in milliseconds (exponential backoff)
+ * @type {number}
+ */
+const INITIAL_RETRY_DELAY = 1000;
+
+/**
  * API handler for OpenAI requests
  * This endpoint acts as a proxy between the frontend and OpenAI API
  * @param {Request} request - The incoming HTTP request
@@ -37,33 +49,35 @@ export default async function handler(request, response) {
 
         // Initialize OpenAI client
         const openai = new OpenAI({
-            apiKey: apiKey
+            apiKey: apiKey,
+            maxRetries: MAX_RETRIES, // Built-in retries for network errors
+            timeout: 60000, // 60 second timeout
         });
 
         // Handle different actions
         let result;
         switch (action) {
             case 'generateTitle':
-                result = await generateTitle(openai, reqBody.plotElements);
+                result = await executeWithRetry(() => generateTitle(openai, reqBody.plotElements));
                 return response.status(200).json({ title: result });
 
             case 'generateMoviePlot':
-                result = await generateMoviePlot(openai, reqBody.plotElements);
+                result = await executeWithRetry(() => generateMoviePlot(openai, reqBody.plotElements));
                 return response.status(200).json({
                     title: result.title || reqBody.plotElements.title || '',
                     plot: result.plot || ''
                 });
 
             case 'generatePosterDescription':
-                result = await generatePosterDescription(openai, { plot: reqBody.plot, style: reqBody.style });
+                result = await executeWithRetry(() => generatePosterDescription(openai, { plot: reqBody.plot, style: reqBody.style }));
                 return response.status(200).json({ description: result });
 
             case 'generateMovieTrailer':
-                result = await generateMovieTrailer(openai, reqBody.plotElements);
+                result = await executeWithRetry(() => generateMovieTrailer(openai, reqBody.plotElements));
                 return response.status(200).json({ trailer: result });
 
             case 'generateTrailerAudio':
-                result = await generateTrailerAudio(openai, { trailerText: reqBody.trailerText });
+                result = await executeWithRetry(() => generateTrailerAudio(openai, { trailerText: reqBody.trailerText }));
                 // For audio, we need to handle differently since it's binary data
                 if (typeof result === 'string') {
                     return response.status(200).json({ audio: result });
@@ -72,7 +86,7 @@ export default async function handler(request, response) {
                 }
 
             case 'generateMultipleMovies':
-                result = await generateMultipleMovies(openai, { count: reqBody.count || 3 });
+                result = await executeWithRetry(() => generateMultipleMovies(openai, { count: reqBody.count || 3 }));
                 return response.status(200).json({ movies: result });
 
             default:
@@ -81,10 +95,20 @@ export default async function handler(request, response) {
     } catch (error) {
         console.error('Error processing OpenAI request:', error);
 
+        // Get HTTP status code from the error if available
+        const statusCode = error.status ||
+            (error.response && error.response.status) ||
+            500;
+
+        // Determine if it's a rate limit issue
+        const isRateLimit = statusCode === 429 ||
+            (error.message && error.message.includes('rate limit'));
+
         // Enhanced error reporting
         const errorResponse = {
-            error: 'Error processing request',
+            error: isRateLimit ? 'Rate limit exceeded' : 'Error processing request',
             message: error.message || 'Unknown error occurred',
+            retry: isRateLimit || statusCode >= 500, // Suggest retry for rate limit or server errors
             details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         };
 
@@ -96,8 +120,51 @@ export default async function handler(request, response) {
             };
         }
 
-        return response.status(500).json(errorResponse);
+        // Keep stack trace for development, but not in production
+        if (process.env.NODE_ENV === 'development') {
+            console.error('Detailed error:', error);
+        }
+
+        return response.status(statusCode).json(errorResponse);
     }
+}
+
+/**
+ * Execute a function with retry logic for transient errors
+ * @param {Function} fn - Function to execute
+ * @returns {Promise<any>} - Result of the function
+ * @throws {Error} - Throws if all retries fail
+ */
+async function executeWithRetry(fn) {
+    let lastError;
+    let delay = INITIAL_RETRY_DELAY;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+
+            // Only retry on server errors (5xx) or rate limiting (429)
+            const shouldRetry =
+                error.status === 429 || // Rate limit
+                (error.status && error.status >= 500 && error.status < 600) || // Server error
+                (error.response && error.response.status === 429) || // Rate limit via response
+                (error.response && error.response.status >= 500 && error.response.status < 600); // Server error via response
+
+            if (!shouldRetry || attempt >= MAX_RETRIES) {
+                throw error; // Don't retry client errors or if we've exceeded max retries
+            }
+
+            console.log(`Attempt ${attempt} failed, retrying in ${delay}ms...`, error.message);
+
+            // Wait before retrying with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // Exponential backoff
+        }
+    }
+
+    throw lastError; // This will only be reached if the loop exits without returning
 }
 
 /**
