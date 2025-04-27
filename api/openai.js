@@ -458,7 +458,7 @@ For Part 2, be specific about visual elements, composition, positioning, color s
 }
 
 /**
- * Generate a movie poster using OpenAI's SORA video generation API
+ * Generate a movie poster using OpenAI's DALL-E 3 image generation API
  * @param {Object} openai - OpenAI client instance
  * @param {Object} params - Parameters including plot elements and style
  * @returns {Promise<string>} - URL to the generated poster image
@@ -472,60 +472,44 @@ async function generateMoviePoster(openai, params) {
 
         const { title, formerProfession, setting, villain, hasCameo, cameo } = plot;
 
-        // Generate a detailed poster description for SORA
-        const posterDescriptionPrompt = `
-            Create a detailed description of a movie poster for an action film titled "${title}" starring Jason Statham.
+        // Create a direct, focused prompt for DALL-E 3
+        const posterPrompt = `Create a professional movie poster for an action film titled "${title}" starring Jason Statham.
 
-            Style: ${style} (${style === 'action' ? 'high-contrast with dramatic lighting, explosions' :
-                style === 'artsy' ? 'minimalist, artistic approach with bold colors' :
-                    'retro style with grainy textures, faded colors, 1970s-80s aesthetic'})
+Style: ${style === 'action' ? 'High-contrast action movie poster with dramatic lighting, explosions, and urban environments. Blues and oranges color scheme.' :
+          style === 'artsy' ? 'Minimalist artistic movie poster with bold colors, negative space, and symbolic imagery rather than literal representation.' :
+          'Vintage retro movie poster with grainy textures, faded colors, and a 1970s-80s aesthetic like classic action films.'}
 
-            Setting: ${setting}
-            Jason Statham's character: A former ${formerProfession}
-            Main villain or threat: ${villain}
-            ${hasCameo ? `Special appearance by: ${cameo}` : ''}
+Setting: ${setting}
+Jason Statham plays: A former ${formerProfession}
+Main villain: ${villain}
+${hasCameo ? `Also featuring: ${cameo}` : ''}
 
-            Focus on describing a single, high-quality, photorealistic movie poster image with detailed visual elements.
-            Describe Jason Statham's appearance, pose, and expression. Include action elements, dramatic lighting, and composition.
-            Make it look like a professional Hollywood movie poster with the title prominently displayed.
-        `;
+The poster must have the movie title "${title.toUpperCase()}" prominently displayed. Show Jason Statham in a dynamic action pose. Make it look like a professional Hollywood movie poster that would appear in theaters.`;
 
-        // Generate detailed visual description using GPT-4 for better quality
-        const descriptionResponse = await openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are a professional movie poster designer. Create detailed visual descriptions for movie posters that could be used to generate images. Be specific about visual elements, composition, lighting, and atmosphere.'
-                },
-                { role: 'user', content: posterDescriptionPrompt }
-            ],
-            max_tokens: 700,
-            temperature: 0.7,
-        });
+        console.log('Generating poster with prompt:', posterPrompt);
 
-        const posterDescription = descriptionResponse.choices[0].message.content.trim();
-        console.log('SORA poster description:', posterDescription);
-
-        // Use SORA to generate the poster image
+        // Use DALL-E 3 to generate the image directly
         const imageResponse = await openai.images.generate({
-            model: "sora-1.0",  // SORA model for photorealistic image generation
-            prompt: posterDescription,
-            n: 1,               // Generate one image
-            size: "1024x1536",  // Portrait orientation for movie poster
-            quality: "hd",      // High quality
+            model: "dall-e-3",  // Use DALL-E 3 for high-quality image generation
+            prompt: posterPrompt,
+            n: 1,
+            size: "1024x1792", // Portrait orientation for movie poster
+            quality: "hd",
+            style: "vivid", // For more dramatic, colorful results
             response_format: "url"
         });
 
         // Get the URL from the response
+        if (!imageResponse.data || !imageResponse.data[0] || !imageResponse.data[0].url) {
+            throw new Error('No image URL returned from DALL-E API');
+        }
+
         const imageUrl = imageResponse.data[0].url;
+        console.log('Successfully generated poster image:', imageUrl);
 
-        // For production, you would save this image to your own storage
-        // and return a URL to that stored image. For now, just return the OpenAI URL.
         return imageUrl;
-
     } catch (error) {
-        console.error('Error generating movie poster with SORA:', error);
+        console.error('Error generating movie poster with DALL-E:', error);
         throw error;
     }
 }
