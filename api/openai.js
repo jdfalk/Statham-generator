@@ -26,13 +26,14 @@ export default async function handler(request, response) {
 
     try {
         // Parse the request body
-        const { action, params } = request.body;
+        const reqBody = request.body;
+        const action = reqBody.action;
 
         if (!action) {
             return response.status(400).json({ error: 'Action parameter is required' });
         }
 
-        console.log(`Processing ${action} request with params:`, JSON.stringify(params));
+        console.log(`Processing ${action} request:`, JSON.stringify(reqBody));
 
         // Initialize OpenAI client
         const openai = new OpenAI({
@@ -43,29 +44,31 @@ export default async function handler(request, response) {
         let result;
         switch (action) {
             case 'generateTitle':
-                result = await generateTitle(openai, params);
-                break;
+                result = await generateTitle(openai, reqBody.plotElements);
+                return response.status(200).json({ title: result });
+
             case 'generateMoviePlot':
-                result = await generateMoviePlot(openai, params);
-                break;
-            case 'generateMovieTrailer':
-                result = await generateMovieTrailer(openai, params);
-                break;
+                result = await generateMoviePlot(openai, reqBody.plotElements);
+                return response.status(200).json({
+                    title: result.title,
+                    plot: result.plot
+                });
+
             case 'generatePosterDescription':
-                result = await generatePosterDescription(openai, params);
-                break;
+                result = await generatePosterDescription(openai, { plot: reqBody.plot, style: reqBody.style });
+                return response.status(200).json({ description: result });
+
+            case 'generateMovieTrailer':
+                result = await generateMovieTrailer(openai, reqBody.plotElements);
+                return response.status(200).json({ trailer: result });
+
             case 'generateTrailerAudio':
-                result = await generateTrailerAudio(openai, params);
-                break;
-            case 'generateMultipleMovies':
-                result = await generateMultipleMovies(openai, params);
-                break;
+                result = await generateTrailerAudio(openai, { trailerText: reqBody.trailerText });
+                return response.status(200).json({ audio: result });
+
             default:
                 return response.status(400).json({ error: `Invalid action: ${action}` });
         }
-
-        // Return the result
-        return response.status(200).json({ result });
     } catch (error) {
         console.error('Error processing OpenAI request:', error);
 
@@ -94,9 +97,9 @@ export default async function handler(request, response) {
  * @param {Object} elements - Elements to inspire the title
  * @returns {Promise<string>} - Generated title
  */
-async function generateTitle(openai, { plotDescription, plotElements }) {
-    const prompt = plotDescription
-        ? `Create an exciting, punchy title for a Jason Statham action movie with this plot: ${plotDescription}`
+async function generateTitle(openai, plotElements) {
+    const prompt = plotElements.plotDescription
+        ? `Create an exciting, punchy title for a Jason Statham action movie with this plot: ${plotElements.plotDescription}`
         : `Create an exciting, punchy title for a Jason Statham action movie with these elements:
            - Former profession: ${plotElements.formerProfession || 'special forces'}
            - Setting: ${plotElements.setting || 'urban environment'}
