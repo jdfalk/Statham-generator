@@ -1,9 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    generateMoviePlot,
+    generateMovieTrailer,
+    generateTrailerAudio
+} from '../services/openaiService';
 
-function MoviePlot({ onPlotGenerated }) {
+function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false }) {
     const [plot, setPlot] = useState(null);
     const [trailerMode, setTrailerMode] = useState(false);
     const [hardcoreMode, setHardcoreMode] = useState(false);
+    const [useAI, setUseAI] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [aiGeneratedPlot, setAiGeneratedPlot] = useState('');
+    const [aiGeneratedTrailer, setAiGeneratedTrailer] = useState('');
+    const [trailerAudioUrl, setTrailerAudioUrl] = useState('');
+    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+    const audioRef = useRef(null);
 
     const titles = [
         'Adrenaline Rush', 'Death Race', 'The Transporter: Final Run',
@@ -131,7 +143,60 @@ function MoviePlot({ onPlotGenerated }) {
     const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
     const includeCameo = () => Math.random() > 0.7; // 30% chance of a cameo
 
-    const generatePlot = () => {
+    useEffect(() => {
+        return () => {
+            if (trailerAudioUrl) {
+                URL.revokeObjectURL(trailerAudioUrl);
+            }
+        };
+    }, [trailerAudioUrl]);
+
+    useEffect(() => {
+        if (studioMode && !plot) {
+            generatePlot();
+        }
+    }, [studioMode]);
+
+    const generateAudio = async (trailerText) => {
+        if (!openaiEnabled || !trailerText) return;
+
+        setIsGeneratingAudio(true);
+        try {
+            const audioUrl = await generateTrailerAudio(trailerText);
+            if (audioUrl) {
+                setTrailerAudioUrl(audioUrl);
+            }
+        } catch (error) {
+            console.error('Failed to generate audio:', error);
+        } finally {
+            setIsGeneratingAudio(false);
+        }
+    };
+
+    const generateOpenAIContent = async (plotElements) => {
+        if (!openaiEnabled || !useAI) return;
+
+        try {
+            const aiPlot = await generateMoviePlot(plotElements);
+            if (aiPlot) {
+                setAiGeneratedPlot(aiPlot);
+            }
+
+            const aiTrailer = await generateMovieTrailer(plotElements);
+            if (aiTrailer) {
+                setAiGeneratedTrailer(aiTrailer);
+
+                if (trailerMode) {
+                    generateAudio(aiTrailer);
+                }
+            }
+        } catch (error) {
+            console.error('Error generating OpenAI content:', error);
+        }
+    };
+
+    const generatePlot = async () => {
+        setLoading(true);
         const hasCameo = includeCameo();
         const cameo = hasCameo ? random(cameos) : null;
 
@@ -157,14 +222,37 @@ function MoviePlot({ onPlotGenerated }) {
 
         setPlot(newPlot);
 
-        // Pass the plot data to the parent component
+        if (openaiEnabled && useAI) {
+            await generateOpenAIContent(newPlot);
+        }
+
+        setLoading(false);
+
         if (onPlotGenerated) {
             onPlotGenerated(newPlot);
         }
     };
 
+    const toggleAudio = () => {
+        if (!audioRef.current) return;
+
+        if (audioRef.current.paused) {
+            audioRef.current.play();
+        } else {
+            audioRef.current.pause();
+        }
+    };
+
     const getPlotText = () => {
         if (!plot) return "";
+
+        if (openaiEnabled && useAI) {
+            if (trailerMode && aiGeneratedTrailer) {
+                return aiGeneratedTrailer;
+            } else if (!trailerMode && aiGeneratedPlot) {
+                return aiGeneratedPlot;
+            }
+        }
 
         const standardPlot = `
             In this action-packed thriller, Jason Statham plays a former ${plot.formerProfession} who now works as a ${plot.currentJob} trying to live a quiet life. But when ${plot.plotTrigger}, he's forced back into action.
@@ -219,7 +307,7 @@ function MoviePlot({ onPlotGenerated }) {
         <div className="movie-plot">
             {!plot ? (
                 <div>
-                    <p>Click the button to generate a Jason Statham movie!</p>
+                    {!studioMode && <p>Click the button to generate a Jason Statham movie!</p>}
                     <div className="options">
                         <label>
                             <input
@@ -237,14 +325,42 @@ function MoviePlot({ onPlotGenerated }) {
                             />
                             Hardcore Mode
                         </label>
+                        {openaiEnabled && (
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    checked={useAI}
+                                    onChange={() => setUseAI(!useAI)}
+                                />
+                                Use AI Enhancement
+                            </label>
+                        )}
                     </div>
-                    <button className="generate-btn" onClick={generatePlot}>Generate Movie</button>
+                    <button
+                        className="generate-btn"
+                        onClick={generatePlot}
+                        disabled={loading}
+                    >
+                        {loading ? 'Generating...' : studioMode ? 'Generate' : 'Generate Movie'}
+                    </button>
                 </div>
             ) : (
                 <div>
                     <div className="plot-container">
                         <h2>{plot.title}</h2>
                         <div className={trailerMode ? 'trailer-text' : 'plot-text'}>
+                            {trailerMode && trailerAudioUrl && (
+                                <div className="audio-player">
+                                    <audio ref={audioRef} src={trailerAudioUrl} />
+                                    <button
+                                        className="audio-btn"
+                                        onClick={toggleAudio}
+                                        disabled={isGeneratingAudio}
+                                    >
+                                        {isGeneratingAudio ? 'Generating Audio...' : '▶️ Play Trailer Voice'}
+                                    </button>
+                                </div>
+                            )}
                             {getPlotText().split('\n').map((text, index) => (
                                 <p key={index}>{text.trim()}</p>
                             ))}
@@ -255,7 +371,13 @@ function MoviePlot({ onPlotGenerated }) {
                             <input
                                 type="checkbox"
                                 checked={trailerMode}
-                                onChange={() => setTrailerMode(!trailerMode)}
+                                onChange={() => {
+                                    setTrailerMode(!trailerMode);
+                                    if (!trailerMode && openaiEnabled && useAI) {
+                                        const trailerText = aiGeneratedTrailer || getPlotText();
+                                        generateAudio(trailerText);
+                                    }
+                                }}
                             />
                             Trailer Voice Mode
                         </label>
@@ -267,8 +389,26 @@ function MoviePlot({ onPlotGenerated }) {
                             />
                             Hardcore Mode
                         </label>
+                        {openaiEnabled && (
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    checked={useAI}
+                                    onChange={() => setUseAI(!useAI)}
+                                />
+                                Use AI Enhancement
+                            </label>
+                        )}
                     </div>
-                    <button className="generate-btn" onClick={generatePlot}>Generate New Movie</button>
+                    {!studioMode && (
+                        <button
+                            className="generate-btn"
+                            onClick={generatePlot}
+                            disabled={loading}
+                        >
+                            {loading ? 'Generating...' : 'Generate New Movie'}
+                        </button>
+                    )}
                 </div>
             )}
         </div>
