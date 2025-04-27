@@ -76,12 +76,23 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
         formerProfessions: [
             'Navy SEAL', 'MI6 Operative', 'Special Forces soldier',
             'undercover cop', 'elite hitman', 'government assassin',
-            'private military contractor', 'black ops specialist'
+            'private military contractor', 'black ops specialist',
+            'Delta Force commando', 'Royal Marines officer',
+            'CIA field agent', 'KGB defector', 'Spetsnaz operative',
+            'bomb disposal expert', 'hostage negotiator', 'SWAT team leader',
+            'combat medic', 'military interrogator', 'foreign legion veteran',
+            'covert operations specialist', 'counter-terrorism expert',
+            'intelligence officer', 'deep cover operative', 'pararescue jumper'
         ],
         currentJobs: [
             'gas station attendant', 'grocery store clerk', 'auto mechanic',
-            'bartender', 'taxi driver', 'bouncer at a local club',
-            'fishing boat captain', 'martial arts instructor'
+            'bartender', 'bouncer at a local club',
+            'fishing boat captain', 'martial arts instructor',
+            'construction worker', 'warehouse worker', 'truck driver',
+            'handyman', 'tow truck operator', 'factory worker',
+            'security guard', 'janitor', 'logger', 'plumber',
+            'electrician', 'delivery driver', 'diner cook',
+            'maintenance worker', 'gardener', 'roadside mechanic'
         ],
         plotTriggers: [
             'his daughter is kidnapped', 'his brother is murdered',

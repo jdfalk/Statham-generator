@@ -157,24 +157,32 @@ function MoviePoster({ plot, openaiEnabled = false }) {
      * Generate a poster image using DALL-E 3
      */
     const generatePosterImage = async () => {
-        if (!plot || !openaiEnabled || !useAI || !useImageGen) return;
+        if (!plot) return;
 
         setIsGeneratingImage(true);
         setError(null);
         setPosterImageUrl('');
 
         try {
-            // Get enhanced plot details for better image generation
-            const enhancedPlot = {
-                ...plot,
-                ...getEnhancedPlotDetails()
-            };
+            if (openaiEnabled && useAI && useImageGen) {
+                // Get enhanced plot details for better image generation
+                const enhancedPlot = {
+                    ...plot,
+                    ...getEnhancedPlotDetails()
+                };
 
-            const imageUrl = await generateMoviePoster(enhancedPlot, posterStyle);
-            if (imageUrl) {
-                setPosterImageUrl(imageUrl);
+                const imageUrl = await generateMoviePoster(enhancedPlot, posterStyle);
+                if (imageUrl) {
+                    setPosterImageUrl(imageUrl);
+                } else {
+                    throw new Error('No image URL returned');
+                }
             } else {
-                throw new Error('No image URL returned');
+                // If not using AI, simulate image generation with a delay
+                setTimeout(() => {
+                    setError('Image generation requires OpenAI API access. Using concept visualization instead.');
+                    setIsGeneratingImage(false);
+                }, 1500);
             }
         } catch (error) {
             console.error('Error generating poster image with DALL-E:', error);
@@ -354,18 +362,17 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                             <p>COMING SOON</p>
                         </div>
 
-                        {/* Add Generate button for poster generation */}
-                        {openaiEnabled && useAI && useImageGen && !isGeneratingImage && (
-                            <div className="generate-poster-btn">
-                                <button
-                                    onClick={generatePosterImage}
-                                    disabled={isGeneratingImage}
-                                    className="generate-btn"
-                                >
-                                    {posterImageUrl ? 'Regenerate Poster' : 'Generate Poster'}
-                                </button>
-                            </div>
-                        )}
+                        {/* Always show Generate Poster button when we have a plot */}
+                        <div className="generate-poster-btn">
+                            <button
+                                onClick={generatePosterImage}
+                                disabled={isGeneratingImage}
+                                className="generate-btn"
+                            >
+                                {isGeneratingImage ? 'Generating...' :
+                                    posterImageUrl ? 'Regenerate Poster' : 'Generate Poster'}
+                            </button>
+                        </div>
                     </div>
                 </>
             )}
