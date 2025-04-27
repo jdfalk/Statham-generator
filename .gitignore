@@ -2,3 +2,5 @@ node_modules/
 .nev
 public/build
 .vercel
+.env
+/.env.*
