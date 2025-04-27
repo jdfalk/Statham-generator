@@ -11,7 +11,7 @@ function MovieStudio({ openaiEnabled }) {
         setIsGenerating(true);
 
         // Create an array of the requested number of movies
-        const newMovies = Array(movieCount).fill().map((_, index) => ({
+        const newMovies = Array(movieCount).fill(null).map((_, index) => ({
             id: Date.now() + index,
             generated: false,
             plot: null
