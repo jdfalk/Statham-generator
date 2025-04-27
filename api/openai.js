@@ -494,69 +494,55 @@ async function generateMoviePoster(openai, params) {
             throw new Error('Missing required parameters: plot and style');
         }
 
-        const { title, formerProfession, setting, villain, hasCameo, cameo, weapon, location, action } = plot;
+        // Get the essential information to create the poster
+        const { title, formerProfession, setting, villain } = plot;
 
-        // Extract specific details that make this poster unique
-        const plotText = plot.plot || '';
-        const isTokyo = plotText.toLowerCase().includes('tokyo') || setting.toLowerCase().includes('tokyo');
-        const hasStreetRacing = plotText.toLowerCase().includes('street racing') || plotText.toLowerCase().includes('racing circuit');
-        const hasDualPistols = plotText.toLowerCase().includes('dual pistols') || weapon === 'dual pistols';
-        const hasNeonLights = isTokyo || plotText.toLowerCase().includes('neon');
-
-        // Additional visual elements based on plot
-        const visualElements = [];
-        if (isTokyo) visualElements.push('neon-lit Tokyo skyline');
-        if (hasStreetRacing) visualElements.push('illegal street racing scene');
-        if (hasDualPistols) visualElements.push('dual pistols drawn and ready');
-        if (hasNeonLights) visualElements.push('vibrant neon signs reflecting on wet streets');
-        if (plotText.includes('warehouse')) visualElements.push('industrial warehouse setting');
-
-        // Create a poster prompt that incorporates specific elements from the Tokyo Revolt plot
-        let posterPrompt = `Create a professional movie poster for an action film titled "${title}" starring Jason Statham.
-
-Style: ${style === 'action' ? 'High-contrast action movie poster with dramatic lighting, explosions, and urban environments. Blues and oranges color scheme.' :
-                style === 'artsy' ? 'Minimalist artistic movie poster with bold colors, negative space, and symbolic imagery rather than literal representation.' :
-                    'Vintage retro movie poster with grainy textures, faded colors, and a 1970s-80s aesthetic like classic action films.'}
-
-Setting: ${isTokyo ? 'Neon-lit Tokyo streets with vibrant city lights and reflective wet pavement' : setting}
-Jason Statham plays: A former ${formerProfession} ${hasStreetRacing ? 'now involved in illegal street racing' : ''}
-Main villain: ${villain}
-${hasCameo ? `Also featuring: ${cameo}` : ''}
-
-The poster must include:
-- The movie title "${title.toUpperCase()}" prominently displayed in bold, ${style === 'action' ? 'high-impact' : style === 'artsy' ? 'artistic' : 'retro'} typography
-- Jason Statham in a dynamic action pose ${hasDualPistols ? 'with dual pistols drawn' : 'ready for action'}`;
-
-        // Add visual elements based on plot specifics
-        if (visualElements.length > 0) {
-            posterPrompt += `\n- Visual elements: ${visualElements.join(', ')}`;
+        // Make sure title exists - this is critical for the poster
+        if (!title) {
+            throw new Error('Movie title is required for poster generation');
         }
 
-        // Add style-specific elements
+        // Simplified prompt approach to avoid potential policy violations
+        let posterPrompt = '';
+
         if (style === 'action') {
-            posterPrompt += `\n\nCreate a high-energy, dramatic movie poster with intense lighting. Use a color palette dominated by neon blues and fiery oranges. The poster should feel like a blockbuster action thriller, with Jason Statham as the central focus in a heroic, dynamic pose against the ${isTokyo ? 'Tokyo cityscape' : setting} backdrop.`;
-        } else if (style === 'artsy') {
-            posterPrompt += `\n\nCreate an artistic, stylized movie poster with a bold, minimalist approach. Use striking color contrasts and negative space. Incorporate symbolic elements representing ${isTokyo ? 'Tokyo' : setting} and the conflict with ${villain}. The design should be unconventional yet visually powerful.`;
-        } else { // vintage
-            posterPrompt += `\n\nCreate a vintage-style movie poster reminiscent of 1970s-80s action films. Include a grainy texture, slightly faded colors, and classic composition. The poster should have a retro typography style and potentially feature multiple action vignettes arranged in a classic layout.`;
+            posterPrompt = `Create a professional movie poster for an action thriller titled "${title}" starring Jason Statham.
+            Use a high-contrast style with dramatic lighting, blues and oranges color scheme.
+            Show Statham in a heroic action pose. Set in ${setting}.
+            Include the title "${title}" in bold, impactful typography.`;
         }
+        else if (style === 'artsy') {
+            posterPrompt = `Create an artistic movie poster for a film titled "${title}" starring Jason Statham.
+            Use a minimalist approach with bold colors, negative space, and symbolic imagery.
+            Include an artistic representation of the conflict between Statham's character and ${villain}.
+            Display the title "${title}" in stylized, artistic typography.`;
+        }
+        else { // vintage style
+            posterPrompt = `Create a vintage-style movie poster for "${title}" starring Jason Statham.
+            Use a retro 1970s-80s action film aesthetic with grainy texture and slightly faded colors.
+            Feature Statham in a classic action pose appropriate for the ${setting} setting.
+            Use retro typography for the title "${title}".`;
+        }
+
+        // Add context about the character without being too specific
+        posterPrompt += ` Statham plays a former ${formerProfession}.`;
 
         console.log('Generating poster with prompt:', posterPrompt);
 
-        // Use DALL-E 3 to generate the image directly
+        // Try to ensure DALL-E completes successfully with these parameters
         const imageResponse = await openai.images.generate({
-            model: "dall-e-3",  // Use DALL-E 3 for high-quality image generation
+            model: "dall-e-3",
             prompt: posterPrompt,
             n: 1,
-            size: "1024x1792", // Portrait orientation for movie poster
-            quality: "hd",
-            style: "vivid", // For more dramatic, colorful results
+            size: "1024x1024", // Using standard square format which has better success rate
+            quality: "standard", // Using standard quality to avoid potential errors
+            style: "vivid",
             response_format: "url"
         });
 
-        // Get the URL from the response
-        if (!imageResponse.data || !imageResponse.data[0] || !imageResponse.data[0].url) {
-            throw new Error('No image URL returned from DALL-E API');
+        // Check for a valid response
+        if (!imageResponse || !imageResponse.data || !imageResponse.data[0] || !imageResponse.data[0].url) {
+            throw new Error('No valid image data returned from DALL-E API');
         }
 
         const imageUrl = imageResponse.data[0].url;
@@ -564,8 +550,19 @@ The poster must include:
 
         return imageUrl;
     } catch (error) {
-        console.error('Error generating movie poster with DALL-E:', error);
-        throw error;
+        // Enhanced error logging with complete details
+        console.error('DALL-E Image Generation Error:', {
+            message: error.message,
+            status: error.status,
+            data: error.response?.data,
+            stack: error.stack
+        });
+
+        // Make sure we're propagating enough details for debugging
+        const enhancedError = new Error(`Failed to generate movie poster: ${error.message}`);
+        enhancedError.status = error.status || 500;
+        enhancedError.originalError = error;
+        throw enhancedError;
     }
 }
 

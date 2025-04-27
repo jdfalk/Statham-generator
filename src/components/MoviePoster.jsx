@@ -121,8 +121,12 @@ function MoviePoster({ plot, openaiEnabled = false }) {
 
     // Generate OpenAI poster description when plot or poster style changes
     useEffect(() => {
-        if (plot && openaiEnabled && useAI) {
-            generateAIPosterDescription();
+        // Removed auto-generation to only show the button
+        // Description will only be generated when user clicks the button
+        if (plot) {
+            // Just prepare the component without generating anything
+            setPosterImageUrl('');
+            setError(null);
         }
     }, [plot, posterStyle, useAI]);
 
@@ -140,10 +144,8 @@ function MoviePoster({ plot, openaiEnabled = false }) {
             if (description) {
                 setAiPosterDescription(description);
 
-                // Generate poster image with DALL-E if enabled
-                if (useImageGen) {
-                    generatePosterImage();
-                }
+                // Removed auto-generation of image
+                // User must click the Generate Poster button explicitly
             }
         } catch (error) {
             console.error('Error generating poster description:', error);
@@ -274,11 +276,8 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                                             type="checkbox"
                                             checked={useImageGen}
                                             onChange={() => {
-                                                const newUseImageGen = !useImageGen;
-                                                setUseImageGen(newUseImageGen);
-                                                if (newUseImageGen && !posterImageUrl) {
-                                                    generatePosterImage();
-                                                }
+                                                setUseImageGen(!useImageGen);
+                                                // Removed auto-generation when checkbox is toggled
                                             }}
                                         />
                                         Generate Image
