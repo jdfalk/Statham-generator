@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import MoviePlot from './components/MoviePlot.jsx';
+import MoviePoster from './components/MoviePoster.jsx';
 import './App.css';
 
 function App() {
+  const [plotData, setPlotData] = useState(null);
+
+  const handlePlotGenerated = (newPlotData) => {
+    setPlotData(newPlotData);
+  };
+
   return (
     <div className="app">
       <header>
@@ -11,7 +18,8 @@ function App() {
       </header>
 
       <main>
-        <MoviePlot />
+        <MoviePlot onPlotGenerated={handlePlotGenerated} />
+        <MoviePoster plot={plotData} />
       </main>
 
       <footer>
