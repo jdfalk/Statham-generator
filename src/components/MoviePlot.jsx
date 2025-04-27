@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-function MoviePlot() {
+function MoviePlot({ onPlotGenerated }) {
     const [plot, setPlot] = useState(null);
     const [trailerMode, setTrailerMode] = useState(false);
     const [hardcoreMode, setHardcoreMode] = useState(false);
@@ -135,7 +135,7 @@ function MoviePlot() {
         const hasCameo = includeCameo();
         const cameo = hasCameo ? random(cameos) : null;
 
-        setPlot({
+        const newPlot = {
             title: random(titles),
             formerProfession: random(formerProfessions),
             currentJob: random(currentJobs),
@@ -153,7 +153,14 @@ function MoviePlot() {
             bossKill: hardcoreMode ? random(bossKills) : "defeated in an epic showdown",
             cameo: cameo,
             hasCameo: hasCameo
-        });
+        };
+
+        setPlot(newPlot);
+
+        // Pass the plot data to the parent component
+        if (onPlotGenerated) {
+            onPlotGenerated(newPlot);
+        }
     };
 
     const getPlotText = () => {
