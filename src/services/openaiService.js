@@ -29,100 +29,166 @@ export const clearOpenAI = () => {
 };
 
 /**
- * Make a request to the server-side OpenAI API endpoint
- * @param {string} action - The action to perform
- * @param {Object} params - Parameters for the action
- * @returns {Promise<any>} - Response from the API
+ * Generates a title for a movie based on provided plot elements
+ *
+ * @param {Object} plotElements - Elements of the plot to use for title generation
+ * @returns {Promise<string>} - The generated title
  */
-async function callServerAPI(action, params) {
+export async function generateTitle(plotElements) {
     try {
         const response = await fetch('/api/openai', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ action, params }),
+            body: JSON.stringify({
+                action: 'generateTitle',
+                plotElements
+            }),
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Server error');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error: ${response.status}`);
         }
 
         const data = await response.json();
-        return data.result;
+        return data.title;
     } catch (error) {
-        console.error(`Error calling ${action}:`, error);
-        apiAvailable = false;
+        console.error('Error calling generateTitle:', error);
         throw error;
     }
 }
 
 /**
- * Generate a movie plot using OpenAI
+ * Generates a movie plot based on provided plot elements
+ *
  * @param {Object} plotElements - Elements to include in the plot
- * @returns {Promise<string>} - Generated plot
+ * @returns {Promise<string>} - The generated plot text
  */
-export const generateMoviePlot = async (plotElements) => {
+export async function generateMoviePlot(plotElements) {
     try {
-        return await callServerAPI('generateMoviePlot', plotElements);
-    } catch (error) {
-        console.error('Error generating plot with OpenAI:', error);
-        return null;
-    }
-};
+        const response = await fetch('/api/openai', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'generateMoviePlot',
+                plotElements
+            }),
+        });
 
-/**
- * Generate a movie trailer script using OpenAI
- * @param {Object} plotElements - Elements to include in the trailer
- * @returns {Promise<string>} - Generated trailer script
- */
-export const generateMovieTrailer = async (plotElements) => {
-    try {
-        return await callServerAPI('generateMovieTrailer', plotElements);
-    } catch (error) {
-        console.error('Error generating trailer with OpenAI:', error);
-        return null;
-    }
-};
-
-/**
- * Generate a poster description using OpenAI
- * @param {Object} plot - Plot elements
- * @param {string} style - Poster style (action, artsy, vintage)
- * @returns {Promise<string>} - Generated poster description
- */
-export const generatePosterDescription = async (plot, style) => {
-    try {
-        return await callServerAPI('generatePosterDescription', { plot, style });
-    } catch (error) {
-        console.error('Error generating poster description:', error);
-        return null;
-    }
-};
-
-/**
- * Generate trailer audio using OpenAI
- * @param {string} trailerText - Trailer script text
- * @returns {Promise<string>} - URL to audio blob
- */
-export const generateTrailerAudio = async (trailerText) => {
-    try {
-        const base64Audio = await callServerAPI('generateTrailerAudio', { trailerText });
-
-        // Convert base64 to blob and create URL
-        const binaryString = atob(base64Audio);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error: ${response.status}`);
         }
-        const audioBlob = new Blob([bytes.buffer], { type: 'audio/mpeg' });
-        return URL.createObjectURL(audioBlob);
+
+        const data = await response.json();
+        return data.plot;
     } catch (error) {
-        console.error('Error generating audio:', error);
-        return null;
+        console.error('Error calling generateMoviePlot:', error);
+        throw error;
     }
-};
+}
+
+/**
+ * Generates a movie trailer script based on provided plot elements
+ *
+ * @param {Object} plotElements - Elements to include in the trailer
+ * @returns {Promise<string>} - The generated trailer script
+ */
+export async function generateMovieTrailer(plotElements) {
+    try {
+        const response = await fetch('/api/openai', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'generateMovieTrailer',
+                plotElements
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.trailer;
+    } catch (error) {
+        console.error('Error calling generateMovieTrailer:', error);
+        throw error;
+    }
+}
+
+/**
+ * Generates a movie poster description based on the plot and style
+ *
+ * @param {Object} plot - The plot elements
+ * @param {string} style - Poster style (action, artsy, vintage)
+ * @returns {Promise<string>} - The generated poster description
+ */
+export async function generatePosterDescription(plot, style) {
+    try {
+        const response = await fetch('/api/openai', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'generatePosterDescription',
+                plot,
+                style
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.description;
+    } catch (error) {
+        console.error('Error calling generatePosterDescription:', error);
+        throw error;
+    }
+}
+
+/**
+ * Generates audio for a movie trailer
+ *
+ * @param {string} trailerText - Text of the trailer to convert to audio
+ * @returns {Promise<string>} - URL to the generated audio file
+ */
+export async function generateTrailerAudio(trailerText) {
+    try {
+        const response = await fetch('/api/openai', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'generateTrailerAudio',
+                trailerText
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        console.error('Error calling generateTrailerAudio:', error);
+        throw error;
+    }
+}
 
 /**
  * Generate multiple movie plots for studio mode
@@ -131,10 +197,27 @@ export const generateTrailerAudio = async (trailerText) => {
  */
 export const generateMultipleMovies = async (count) => {
     try {
-        return await callServerAPI('generateMultipleMovies', { count });
+        const response = await fetch('/api/openai', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'generateMultipleMovies',
+                count
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.movies;
     } catch (error) {
-        console.error('Error generating multiple movies:', error);
-        return [];
+        console.error('Error calling generateMultipleMovies:', error);
+        throw error;
     }
 };
 
@@ -142,6 +225,7 @@ export default {
     initializeOpenAI,
     isOpenAIInitialized,
     clearOpenAI,
+    generateTitle,
     generateMoviePlot,
     generateMovieTrailer,
     generatePosterDescription,
