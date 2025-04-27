@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { initOpenAI, isInitialized } from '../services/openaiService';
+import { initializeOpenAI, isOpenAIInitialized } from '../services/openaiService';
 
 function ApiKeyManager({ onInitialized }) {
   const [apiKey, setApiKey] = useState('');
@@ -21,7 +21,7 @@ function ApiKeyManager({ onInitialized }) {
     setError('');
 
     try {
-      const success = initOpenAI(key);
+      const success = initializeOpenAI(key);
       if (success) {
         localStorage.setItem('openai_api_key', key);
         setKeyStored(true);
