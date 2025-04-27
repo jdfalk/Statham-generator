@@ -50,8 +50,8 @@ export default async function handler(request, response) {
             case 'generateMoviePlot':
                 result = await generateMoviePlot(openai, reqBody.plotElements);
                 return response.status(200).json({
-                    title: result.title,
-                    plot: result.plot
+                    title: result.title || reqBody.plotElements.title || '',
+                    plot: result.plot || ''
                 });
 
             case 'generatePosterDescription':
@@ -64,7 +64,16 @@ export default async function handler(request, response) {
 
             case 'generateTrailerAudio':
                 result = await generateTrailerAudio(openai, { trailerText: reqBody.trailerText });
-                return response.status(200).json({ audio: result });
+                // For audio, we need to handle differently since it's binary data
+                if (typeof result === 'string') {
+                    return response.status(200).json({ audio: result });
+                } else {
+                    return result;
+                }
+
+            case 'generateMultipleMovies':
+                result = await generateMultipleMovies(openai, { count: reqBody.count || 3 });
+                return response.status(200).json({ movies: result });
 
             default:
                 return response.status(400).json({ error: `Invalid action: ${action}` });
@@ -75,8 +84,8 @@ export default async function handler(request, response) {
         // Enhanced error reporting
         const errorResponse = {
             error: 'Error processing request',
-            message: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            message: error.message || 'Unknown error occurred',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         };
 
         if (error.response) {
@@ -98,6 +107,10 @@ export default async function handler(request, response) {
  * @returns {Promise<string>} - Generated title
  */
 async function generateTitle(openai, plotElements) {
+    if (!plotElements) {
+        throw new Error('Plot elements are required to generate a title');
+    }
+
     const prompt = plotElements.plotDescription
         ? `Create an exciting, punchy title for a Jason Statham action movie with this plot: ${plotElements.plotDescription}`
         : `Create an exciting, punchy title for a Jason Statham action movie with these elements:
@@ -127,7 +140,7 @@ async function generateTitle(openai, plotElements) {
         return title;
     } catch (error) {
         console.error('Error generating title:', error);
-        throw error;
+        throw new Error(`Failed to generate title: ${error.message || 'Unknown error'}`);
     }
 }
 
