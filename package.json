@@ -1,12 +1,19 @@
 {
-  "name": "statham-movie-generator",
+  "name": "statham-generator",
   "version": "1.0.0",
   "private": true,
-  "scription": "Jason Statham movie generator app",
-  "main": "src/index.js",
+  "description": "Jason Statham movie generator app",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
-    "react": "^17.0.0",
-    "react-dom": "^7.0.0",
-    "vite": "^4.0.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "vite": "^4.4.9"
   }
 }
