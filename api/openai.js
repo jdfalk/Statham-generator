@@ -18,6 +18,18 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
 
 /**
+ * Timeout for OpenAI API calls in milliseconds
+ * @type {number}
+ */
+const API_TIMEOUT = 120000; // 2 minutes
+
+/**
+ * Maximum request processing time before returning a timeout response
+ * @type {number}
+ */
+const SERVER_TIMEOUT = 25000; // 25 seconds
+
+/**
  * API handler for OpenAI requests
  * This endpoint acts as a proxy between the frontend and OpenAI API
  * @param {Request} request - The incoming HTTP request
@@ -36,12 +48,24 @@ export default async function handler(request, response) {
         return response.status(500).json({ error: 'Server configuration error: API key not set' });
     }
 
+    // Set up a timeout that will prevent the handler from hanging
+    const timeoutId = setTimeout(() => {
+        console.warn(`Request timed out after ${SERVER_TIMEOUT}ms`);
+        return response.status(504).json({
+            error: 'Request timed out',
+            message: 'The server timed out while waiting for OpenAI to respond. Please try again with a simpler request.',
+            retry: true,
+            errorType: 'timeout'
+        });
+    }, SERVER_TIMEOUT);
+
     try {
         // Parse the request body
         const reqBody = request.body;
         const action = reqBody.action;
 
         if (!action) {
+            clearTimeout(timeoutId);
             return response.status(400).json({ error: 'Action parameter is required' });
         }
 
@@ -51,7 +75,7 @@ export default async function handler(request, response) {
         const openai = new OpenAI({
             apiKey: apiKey,
             maxRetries: MAX_RETRIES, // Built-in retries for network errors
-            timeout: 60000, // 60 second timeout
+            timeout: API_TIMEOUT, // Increased to 2 minutes
         });
 
         // Handle different actions
@@ -59,10 +83,12 @@ export default async function handler(request, response) {
         switch (action) {
             case 'generateTitle':
                 result = await executeWithRetry(() => generateTitle(openai, reqBody.plotElements));
+                clearTimeout(timeoutId);
                 return response.status(200).json({ title: result });
 
             case 'generateMoviePlot':
                 result = await executeWithRetry(() => generateMoviePlot(openai, reqBody.plotElements));
+                clearTimeout(timeoutId);
                 return response.status(200).json({
                     title: result.title || reqBody.plotElements.title || '',
                     plot: result.plot || ''
@@ -70,18 +96,22 @@ export default async function handler(request, response) {
 
             case 'generatePosterDescription':
                 result = await executeWithRetry(() => generatePosterDescription(openai, { plot: reqBody.plot, style: reqBody.style }));
+                clearTimeout(timeoutId);
                 return response.status(200).json({ description: result });
 
             case 'generateMoviePoster':
                 result = await executeWithRetry(() => generateMoviePoster(openai, { plot: reqBody.plot, style: reqBody.style }));
+                clearTimeout(timeoutId);
                 return response.status(200).json({ imageUrl: result });
 
             case 'generateMovieTrailer':
                 result = await executeWithRetry(() => generateMovieTrailer(openai, reqBody.plotElements));
+                clearTimeout(timeoutId);
                 return response.status(200).json({ trailer: result });
 
             case 'generateTrailerAudio':
                 result = await executeWithRetry(() => generateTrailerAudio(openai, { trailerText: reqBody.trailerText }));
+                clearTimeout(timeoutId);
                 // For audio, we need to handle differently since it's binary data
                 if (typeof result === 'string') {
                     return response.status(200).json({ audio: result });
@@ -91,12 +121,15 @@ export default async function handler(request, response) {
 
             case 'generateMultipleMovies':
                 result = await executeWithRetry(() => generateMultipleMovies(openai, { count: reqBody.count || 3 }));
+                clearTimeout(timeoutId);
                 return response.status(200).json({ movies: result });
 
             default:
+                clearTimeout(timeoutId);
                 return response.status(400).json({ error: `Invalid action: ${action}` });
         }
     } catch (error) {
+        clearTimeout(timeoutId);
         console.error('Error processing OpenAI request:', error);
 
         // Get HTTP status code from the error if available
@@ -104,15 +137,24 @@ export default async function handler(request, response) {
             (error.response && error.response.status) ||
             500;
 
-        // Determine if it's a rate limit issue
-        const isRateLimit = statusCode === 429 ||
-            (error.message && error.message.includes('rate limit'));
+        // Determine the type of error
+        const isRateLimit = statusCode === 429 || (error.message && error.message.includes('rate limit'));
+        const isTimeout = statusCode === 504 ||
+            (error.message && (
+                error.message.includes('timeout') ||
+                error.message.includes('timed out')
+            ));
 
         // Enhanced error reporting
         const errorResponse = {
-            error: isRateLimit ? 'Rate limit exceeded' : 'Error processing request',
+            error: isRateLimit ? 'Rate limit exceeded' :
+                isTimeout ? 'Request timed out' :
+                    'Error processing request',
             message: error.message || 'Unknown error occurred',
-            retry: isRateLimit || statusCode >= 500, // Suggest retry for rate limit or server errors
+            retry: isRateLimit || statusCode >= 500 || isTimeout,
+            errorType: isTimeout ? 'timeout' :
+                isRateLimit ? 'rate_limit' :
+                    'api_error',
             details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         };
 
@@ -145,13 +187,31 @@ async function executeWithRetry(fn) {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            return await fn();
+            // Set a timeout promise to race against the function execution
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    const timeoutError = new Error('Operation timed out');
+                    timeoutError.status = 504;
+                    reject(timeoutError);
+                }, API_TIMEOUT);
+            });
+
+            // Race the function against the timeout
+            return await Promise.race([fn(), timeoutPromise]);
         } catch (error) {
             lastError = error;
 
-            // Only retry on server errors (5xx) or rate limiting (429)
+            // Check specifically for timeout errors
+            const isTimeout = error.status === 504 ||
+                (error.message && (
+                    error.message.includes('timeout') ||
+                    error.message.includes('timed out')
+                ));
+
+            // Only retry on server errors (5xx), rate limiting (429), or timeouts
             const shouldRetry =
                 error.status === 429 || // Rate limit
+                isTimeout ||
                 (error.status && error.status >= 500 && error.status < 600) || // Server error
                 (error.response && error.response.status === 429) || // Rate limit via response
                 (error.response && error.response.status >= 500 && error.response.status < 600); // Server error via response
