@@ -106,6 +106,22 @@ async function fetchWithRetry(action, payload) {
                 const errorData = await response.json().catch(() => ({}));
                 const errorMessage = errorData.message || errorData.error || `HTTP error: ${response.status}`;
 
+                // Check specifically for quota errors (no retry)
+                const isQuotaExceeded =
+                    response.status === 429 ||
+                    errorMessage.includes('quota') ||
+                    errorMessage.includes('rate limit') ||
+                    errorMessage.includes('billing');
+
+                if (isQuotaExceeded) {
+                    console.error('API quota exceeded:', errorMessage);
+                    // Mark the service as unavailable
+                    apiAvailable = false;
+                    errorBackoff.isInCooldown = true;
+                    errorBackoff.lastErrorTime = Date.now();
+                    throw new Error(`OpenAI API quota exceeded. Please check your billing details: ${errorMessage}`);
+                }
+
                 // If the server says we should retry, do so unless we've hit max retries
                 if ((errorData.retry || response.status >= 500) && attempt < MAX_RETRIES) {
                     console.warn(`API error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${errorMessage}. Retrying...`);
@@ -124,6 +140,15 @@ async function fetchWithRetry(action, payload) {
             return response;
         } catch (error) {
             lastError = error;
+
+            // If this is a quota error, don't retry
+            if (error.message && (
+                error.message.includes('quota') ||
+                error.message.includes('billing') ||
+                error.message.includes('rate limit')
+            )) {
+                throw error;
+            }
 
             // Only increment error counter on the last attempt
             if (attempt === MAX_RETRIES) {
