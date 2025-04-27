@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { generatePosterDescription } from '../services/openaiService';
 
-function MoviePoster({ plot }) {
+function MoviePoster({ plot, openaiEnabled = false }) {
     const [posterStyle, setPosterStyle] = useState('action'); // action, artsy, vintage
+    const [aiPosterDescription, setAiPosterDescription] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [useAI, setUseAI] = useState(true);
 
     // Poster concepts
     const posterConcepts = {
@@ -75,6 +79,30 @@ function MoviePoster({ plot }) {
 
     const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+    // Generate OpenAI poster description when plot or poster style changes
+    useEffect(() => {
+        if (plot && openaiEnabled && useAI) {
+            generateAIPosterDescription();
+        }
+    }, [plot, posterStyle, useAI]);
+
+    // Generate a poster description using OpenAI
+    const generateAIPosterDescription = async () => {
+        if (!plot || !openaiEnabled || !useAI) return;
+
+        setIsGenerating(true);
+        try {
+            const description = await generatePosterDescription(plot, posterStyle);
+            if (description) {
+                setAiPosterDescription(description);
+            }
+        } catch (error) {
+            console.error('Error generating poster description:', error);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     // Generate a poster concept based on the plot and selected style
     const generatePosterConcept = () => {
         if (!plot) return null;
@@ -121,6 +149,17 @@ function MoviePoster({ plot }) {
                         >
                             Vintage
                         </button>
+
+                        {openaiEnabled && (
+                            <label className="ai-toggle">
+                                <input
+                                    type="checkbox"
+                                    checked={useAI}
+                                    onChange={() => setUseAI(!useAI)}
+                                />
+                                AI Descriptions
+                            </label>
+                        )}
                     </div>
 
                     <div className={`poster-concept ${posterStyle}`}>
@@ -129,18 +168,37 @@ function MoviePoster({ plot }) {
                         </div>
 
                         <div className="poster-tagline">
-                            <p>"{posterConcept.tagline}"</p>
+                            <p>"{openaiEnabled && useAI && aiPosterDescription ?
+                                aiPosterDescription.split('\n')[0] :
+                                posterConcept.tagline}"</p>
                         </div>
 
                         <div className="poster-visualization">
                             <h4>POSTER VISUALIZATION</h4>
-                            <p>{posterConcept.visualTheme}</p>
+                            {isGenerating ? (
+                                <p className="generating-text">Generating AI poster concept...</p>
+                            ) : (
+                                <>
+                                    {openaiEnabled && useAI && aiPosterDescription ? (
+                                        <div className="ai-poster-description">
+                                            {aiPosterDescription.split('\n').slice(1).map((line, i) => (
+                                                <p key={i}>{line}</p>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p>{posterConcept.visualTheme}</p>
+                                    )}
+                                </>
+                            )}
 
                             <div className="poster-details">
                                 <p><strong>Style:</strong> {posterStyle}</p>
                                 <p><strong>Featuring:</strong> Jason Statham as a former {plot.formerProfession}</p>
                                 {plot.hasCameo && <p><strong>With:</strong> {plot.cameo}</p>}
                                 <p><strong>Setting:</strong> {plot.setting}</p>
+                                {!openaiEnabled && (
+                                    <p><strong>Key Visual:</strong> {posterConcept.layout}</p>
+                                )}
                             </div>
                         </div>
 
