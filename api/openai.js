@@ -24,10 +24,22 @@ const INITIAL_RETRY_DELAY = 1000;
 const API_TIMEOUT = 120000; // 2 minutes
 
 /**
+ * Timeout for image generation API calls that need more time
+ * @type {number}
+ */
+const IMAGE_API_TIMEOUT = 180000; // 3 minutes
+
+/**
  * Maximum request processing time before returning a timeout response
  * @type {number}
  */
 const SERVER_TIMEOUT = 25000; // 25 seconds
+
+/**
+ * Longer timeout for image generation requests
+ * @type {number}
+ */
+const IMAGE_SERVER_TIMEOUT = 60000; // 60 seconds
 
 /**
  * API handler for OpenAI requests
@@ -48,34 +60,38 @@ export default async function handler(request, response) {
         return response.status(500).json({ error: 'Server configuration error: API key not set' });
     }
 
-    // Set up a timeout that will prevent the handler from hanging
-    const timeoutId = setTimeout(() => {
-        console.warn(`Request timed out after ${SERVER_TIMEOUT}ms`);
-        return response.status(504).json({
-            error: 'Request timed out',
-            message: 'The server timed out while waiting for OpenAI to respond. Please try again with a simpler request.',
-            retry: true,
-            errorType: 'timeout'
-        });
-    }, SERVER_TIMEOUT);
-
     try {
         // Parse the request body
         const reqBody = request.body;
         const action = reqBody.action;
 
         if (!action) {
-            clearTimeout(timeoutId);
             return response.status(400).json({ error: 'Action parameter is required' });
         }
 
         console.log(`Processing ${action} request:`, JSON.stringify(reqBody));
 
-        // Initialize OpenAI client
+        // Check if this is an image generation request to set appropriate timeouts
+        const isImageRequest = action === 'generateMoviePoster';
+
+        // Set up a timeout that will prevent the handler from hanging
+        // Use longer timeout for image generation
+        const timeoutDuration = isImageRequest ? IMAGE_SERVER_TIMEOUT : SERVER_TIMEOUT;
+        const timeoutId = setTimeout(() => {
+            console.warn(`Request timed out after ${timeoutDuration}ms for ${action}`);
+            return response.status(504).json({
+                error: 'Request timed out',
+                message: 'The server timed out while waiting for OpenAI to respond. Please try again with a simpler request.',
+                retry: true,
+                errorType: 'timeout'
+            });
+        }, timeoutDuration);
+
+        // Initialize OpenAI client with appropriate timeout
         const openai = new OpenAI({
             apiKey: apiKey,
-            maxRetries: MAX_RETRIES, // Built-in retries for network errors
-            timeout: API_TIMEOUT, // Increased to 2 minutes
+            maxRetries: MAX_RETRIES,
+            timeout: isImageRequest ? IMAGE_API_TIMEOUT : API_TIMEOUT, // Use longer timeout for image generation
         });
 
         // Handle different actions
@@ -100,7 +116,8 @@ export default async function handler(request, response) {
                 return response.status(200).json({ description: result });
 
             case 'generateMoviePoster':
-                result = await executeWithRetry(() => generateMoviePoster(openai, { plot: reqBody.plot, style: reqBody.style }));
+                // Using the special executeWithRetryForImages function with longer timeouts
+                result = await executeWithRetry(() => generateMoviePoster(openai, { plot: reqBody.plot, style: reqBody.style }), true);
                 clearTimeout(timeoutId);
                 return response.status(200).json({ imageUrl: result });
 
@@ -129,7 +146,11 @@ export default async function handler(request, response) {
                 return response.status(400).json({ error: `Invalid action: ${action}` });
         }
     } catch (error) {
-        clearTimeout(timeoutId);
+        // Make sure to clear any hanging timeouts
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+
         console.error('Error processing OpenAI request:', error);
 
         // Get HTTP status code from the error if available
@@ -178,22 +199,25 @@ export default async function handler(request, response) {
 /**
  * Execute a function with retry logic for transient errors
  * @param {Function} fn - Function to execute
+ * @param {boolean} isImageRequest - Whether this is an image generation request
  * @returns {Promise<any>} - Result of the function
  * @throws {Error} - Throws if all retries fail
  */
-async function executeWithRetry(fn) {
+async function executeWithRetry(fn, isImageRequest = false) {
     let lastError;
     let delay = INITIAL_RETRY_DELAY;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
             // Set a timeout promise to race against the function execution
+            // Use longer timeout for image generation
+            const timeoutDuration = isImageRequest ? IMAGE_API_TIMEOUT : API_TIMEOUT;
             const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => {
                     const timeoutError = new Error('Operation timed out');
                     timeoutError.status = 504;
                     reject(timeoutError);
-                }, API_TIMEOUT);
+                }, timeoutDuration);
             });
 
             // Race the function against the timeout
@@ -491,8 +515,8 @@ async function generateMoviePoster(openai, params) {
         let posterPrompt = `Create a professional movie poster for an action film titled "${title}" starring Jason Statham.
 
 Style: ${style === 'action' ? 'High-contrast action movie poster with dramatic lighting, explosions, and urban environments. Blues and oranges color scheme.' :
-          style === 'artsy' ? 'Minimalist artistic movie poster with bold colors, negative space, and symbolic imagery rather than literal representation.' :
-          'Vintage retro movie poster with grainy textures, faded colors, and a 1970s-80s aesthetic like classic action films.'}
+                style === 'artsy' ? 'Minimalist artistic movie poster with bold colors, negative space, and symbolic imagery rather than literal representation.' :
+                    'Vintage retro movie poster with grainy textures, faded colors, and a 1970s-80s aesthetic like classic action films.'}
 
 Setting: ${isTokyo ? 'Neon-lit Tokyo streets with vibrant city lights and reflective wet pavement' : setting}
 Jason Statham plays: A former ${formerProfession} ${hasStreetRacing ? 'now involved in illegal street racing' : ''}
