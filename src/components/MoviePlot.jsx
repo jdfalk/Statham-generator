@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+    generateTitle,
     generateMoviePlot,
     generateMovieTrailer,
     generateTrailerAudio
@@ -25,130 +26,120 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
     const [trailerAudioUrl, setTrailerAudioUrl] = useState('');
     const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
     const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+    const [error, setError] = useState(null);
     const audioRef = useRef(null);
 
-    const titles = [
-        'Adrenaline Rush', 'Death Race', 'The Transporter: Final Run',
-        'Crank: Ultimate Surge', 'The Mechanic Returns', 'Fast Vengeance',
-        'Blitz Force', 'Chaos Redemption', 'Expendable Hero', 'Raw Justice',
-        'Terminal Velocity', 'Bulletproof', 'Collision Course', 'Urban Warfare',
-        'Dead Zone', 'Last Stand', 'Rogue Agent', 'Lethal Force'
-    ];
-
-    const settings = [
-        'post-apocalyptic London', 'underground fight club in Bangkok',
-        'high-speed train across Europe', 'skyscraper in Dubai',
-        'secret government facility', 'luxury yacht in the Mediterranean',
-        'abandoned prison complex', 'illegal street racing circuit in Tokyo',
-        'remote military outpost', 'elite assassins\' convention'
-    ];
-
-    const formerProfessions = [
-        'Navy SEAL', 'MI6 Operative', 'Special Forces soldier',
-        'undercover cop', 'elite hitman', 'government assassin',
-        'private military contractor', 'black ops specialist'
-    ];
-
-    const currentJobs = [
-        'gas station attendant', 'grocery store clerk', 'auto mechanic',
-        'bartender', 'taxi driver', 'bouncer at a local club',
-        'fishing boat captain', 'martial arts instructor'
-    ];
-
-    const plotTriggers = [
-        'his daughter is kidnapped', 'his brother is murdered',
-        'an old enemy resurfaces', 'he witnesses a brutal crime',
-        'he\'s framed for a crime he didn\'t commit', 'his peaceful town is threatened',
-        'his hidden past is exposed', 'a mysterious package is delivered to him'
-    ];
-
-    const villains = [
-        'a ruthless drug lord', 'his former mentor turned arms dealer',
-        'corrupt government officials', 'a tech billionaire with mind-control technology',
-        'twin assassins with martial arts skills', 'a criminal mastermind',
-        'an international terrorist organization', 'a sadistic crime family'
-    ];
-
-    const villainGroups = [
-        'the Russian Mob', 'the Yakuza', 'the Triads',
-        'Eastern European gangsters', 'rogue intelligence operatives',
-        'private military contractors', 'a secret society of assassins'
-    ];
-
-    const sidekicks = [
-        'a genius hacker', 'a reluctant rookie cop',
-        'an undercover agent', 'a witty getaway driver',
-        'a skilled martial artist', 'an arms dealer',
-        'his estranged ex-partner', 'a reformed criminal'
-    ];
-
-    const plotTwists = [
-        'he discovers he has only 24 hours to live',
-        'his supposedly dead wife is behind everything',
-        'the mission is a cover for a larger conspiracy',
-        'his sidekick betrays him at the crucial moment',
-        'the villain is his biological sibling',
-        'he\'s been used as a pawn in a government experiment',
-        'he\'s actually the villain\'s clone',
-        'everything was orchestrated by his commanding officer'
-    ];
-
-    const vehicles = [
-        'a modified muscle car', 'a military-grade motorcycle',
-        'a stealth helicopter', 'an armored truck',
-        'a souped-up sports car', 'a weaponized jet ski',
-        'an experimental hovercraft', 'a vintage Aston Martin'
-    ];
-
-    const weapons = [
-        'dual pistols with custom ammunition', 'a prototype energy weapon',
-        'his bare hands and martial arts skills', 'everyday items turned into weapons',
-        'a high-tech multi-tool', 'a rare ancient weapon',
-        'an experimental government firearm', 'a customized sniper rifle'
-    ];
-
-    const actionScenes = [
-        'a brutal fight in a kitchen using cookware as weapons',
-        'a high-speed chase through narrow city streets',
-        'a shootout in an abandoned warehouse',
-        'hand-to-hand combat on top of a moving train',
-        'an explosive escape from a collapsing building',
-        'an underwater battle with enemy divers'
-    ];
-
-    const villainHideouts = [
-        'a luxurious nightclub', 'a fortified warehouse complex',
-        'a private island mansion', 'a penthouse apartment',
-        'an abandoned factory', 'an underground bunker',
-        'a heavily guarded compound', 'a remote mountain fortress'
-    ];
-
-    const bossFights = [
-        'a hand-to-hand fight on a helicopter pad during a storm',
-        'a brutal showdown in a burning building',
-        'a chase through a maze of shipping containers',
-        'a final confrontation in a sacred temple',
-        'a battle on the edge of a skyscraper',
-        'a fight to the death in an industrial meat freezer'
-    ];
-
-    const bossKills = [
-        'thrown into industrial machinery',
-        'ejected from a plane at high altitude',
-        'impaled on their own weapon',
-        'crushed by falling debris',
-        'drowned in a tank of water',
-        'blown up by their own explosives'
-    ];
-
-    const cameos = [
-        'Dwayne "The Rock" Johnson as a rival operative',
-        'Vin Diesel as an old army buddy',
-        'Tom Hardy as a mysterious informant',
-        'Ryan Reynolds as a chatty weapons dealer',
-        'Charlize Theron as a deadly assassin',
-        'Michelle Rodriguez as a street-racing contact'
-    ];
+    // Fallback elements if API fails
+    const fallbackElements = {
+        titles: [
+            'Steel Vengeance', 'Midnight Execute', 'Urban Predator',
+            'Blood Protocol', 'Maximum Impact', 'Terminal Velocity',
+            'Shadow Operative', 'Lethal Measure', 'Absolute Zero',
+            'Deadlock', 'Hard Target', 'Tactical Strike',
+            'Bullet Business', 'Concrete Jungle', 'Chrome Fury',
+            'Iron Command', 'Shock Wave', 'Savage Justice'
+        ],
+        settings: [
+            'post-apocalyptic London', 'underground fight club in Bangkok',
+            'high-speed train across Europe', 'skyscraper in Dubai',
+            'secret government facility', 'luxury yacht in the Mediterranean',
+            'abandoned prison complex', 'illegal street racing circuit in Tokyo',
+            'remote military outpost', 'elite assassins\' convention'
+        ],
+        formerProfessions: [
+            'Navy SEAL', 'MI6 Operative', 'Special Forces soldier',
+            'undercover cop', 'elite hitman', 'government assassin',
+            'private military contractor', 'black ops specialist'
+        ],
+        currentJobs: [
+            'gas station attendant', 'grocery store clerk', 'auto mechanic',
+            'bartender', 'taxi driver', 'bouncer at a local club',
+            'fishing boat captain', 'martial arts instructor'
+        ],
+        plotTriggers: [
+            'his daughter is kidnapped', 'his brother is murdered',
+            'an old enemy resurfaces', 'he witnesses a brutal crime',
+            'he\'s framed for a crime he didn\'t commit', 'his peaceful town is threatened',
+            'his hidden past is exposed', 'a mysterious package is delivered to him'
+        ],
+        villains: [
+            'a ruthless drug lord', 'his former mentor turned arms dealer',
+            'corrupt government officials', 'a tech billionaire with mind-control technology',
+            'twin assassins with martial arts skills', 'a criminal mastermind',
+            'an international terrorist organization', 'a sadistic crime family'
+        ],
+        villainGroups: [
+            'the Russian Mob', 'the Yakuza', 'the Triads',
+            'Eastern European gangsters', 'rogue intelligence operatives',
+            'private military contractors', 'a secret society of assassins'
+        ],
+        sidekicks: [
+            'a genius hacker', 'a reluctant rookie cop',
+            'an undercover agent', 'a witty getaway driver',
+            'a skilled martial artist', 'an arms dealer',
+            'his estranged ex-partner', 'a reformed criminal'
+        ],
+        plotTwists: [
+            'he discovers he has only 24 hours to live',
+            'his supposedly dead wife is behind everything',
+            'the mission is a cover for a larger conspiracy',
+            'his sidekick betrays him at the crucial moment',
+            'the villain is his biological sibling',
+            'he\'s been used as a pawn in a government experiment',
+            'he\'s actually the villain\'s clone',
+            'everything was orchestrated by his commanding officer'
+        ],
+        vehicles: [
+            'a modified muscle car', 'a military-grade motorcycle',
+            'a stealth helicopter', 'an armored truck',
+            'a souped-up sports car', 'a weaponized jet ski',
+            'an experimental hovercraft', 'a vintage Aston Martin'
+        ],
+        weapons: [
+            'dual pistols with custom ammunition', 'a prototype energy weapon',
+            'his bare hands and martial arts skills', 'everyday items turned into weapons',
+            'a high-tech multi-tool', 'a rare ancient weapon',
+            'an experimental government firearm', 'a customized sniper rifle'
+        ],
+        actionScenes: [
+            'a brutal fight in a kitchen using cookware as weapons',
+            'a high-speed chase through narrow city streets',
+            'a shootout in an abandoned warehouse',
+            'hand-to-hand combat on top of a moving train',
+            'an explosive escape from a collapsing building',
+            'an underwater battle with enemy divers'
+        ],
+        villainHideouts: [
+            'a luxurious nightclub', 'a fortified warehouse complex',
+            'a private island mansion', 'a penthouse apartment',
+            'an abandoned factory', 'an underground bunker',
+            'a heavily guarded compound', 'a remote mountain fortress'
+        ],
+        bossFights: [
+            'a hand-to-hand fight on a helicopter pad during a storm',
+            'a brutal showdown in a burning building',
+            'a chase through a maze of shipping containers',
+            'a final confrontation in a sacred temple',
+            'a battle on the edge of a skyscraper',
+            'a fight to the death in an industrial meat freezer'
+        ],
+        bossKills: [
+            'thrown into industrial machinery',
+            'ejected from a plane at high altitude',
+            'impaled on their own weapon',
+            'crushed by falling debris',
+            'drowned in a tank of water',
+            'blown up by their own explosives'
+        ],
+        cameos: [
+            'Dwayne "The Rock" Johnson as a rival operative',
+            'Vin Diesel as an old army buddy',
+            'Tom Hardy as a mysterious informant',
+            'Ryan Reynolds as a chatty weapons dealer',
+            'Charlize Theron as a deadly assassin',
+            'Michelle Rodriguez as a street-racing contact'
+        ]
+    };
 
     const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
     const includeCameo = () => Math.random() > 0.7; // 30% chance of a cameo
@@ -196,9 +187,11 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
     }, [audioRef.current]);
 
     const generateAudio = async (trailerText) => {
-        if (!openaiEnabled || !trailerText) return;
+        if (!openaiEnabled || !trailerText || trailerText.length < 10) return;
 
         setIsGeneratingAudio(true);
+        setError(null);
+
         try {
             const audioUrl = await generateTrailerAudio(trailerText);
             if (audioUrl) {
@@ -210,24 +203,53 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                             .catch(err => console.error('Failed to auto-play audio:', err));
                     }, 500);
                 }
+            } else {
+                setError("Failed to generate audio. Please try again.");
             }
         } catch (error) {
             console.error('Failed to generate audio:', error);
+            setError("Error generating audio: " + (error.message || "Unknown error"));
         } finally {
             setIsGeneratingAudio(false);
         }
     };
 
+    const generateDynamicTitle = async (plotElements) => {
+        if (!openaiEnabled || !useAI) {
+            return random(fallbackElements.titles);
+        }
+
+        try {
+            const title = await generateTitle(plotElements);
+            return title || random(fallbackElements.titles);
+        } catch (error) {
+            console.error('Error generating title:', error);
+            return random(fallbackElements.titles);
+        }
+    };
+
     const generateOpenAIContent = async (plotElements) => {
-        if (!openaiEnabled || !useAI) return;
+        if (!openaiEnabled || !useAI) return null;
+
+        setError(null);
 
         try {
             const aiPlot = await generateMoviePlot(plotElements);
             if (aiPlot) {
-                setAiGeneratedPlot(aiPlot);
+                if (typeof aiPlot === 'string') {
+                    setAiGeneratedPlot(aiPlot);
+                    return { plot: aiPlot, title: plotElements.title };
+                } else {
+                    setAiGeneratedPlot(aiPlot.plot);
+                    return aiPlot;
+                }
             }
 
-            const aiTrailer = await generateMovieTrailer(plotElements);
+            const aiTrailer = await generateMovieTrailer({
+                ...plotElements,
+                plot: aiGeneratedPlot
+            });
+
             if (aiTrailer) {
                 setAiGeneratedTrailer(aiTrailer);
 
@@ -235,73 +257,97 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                     generateAudio(aiTrailer);
                 }
             }
+
+            return null;
         } catch (error) {
             console.error('Error generating OpenAI content:', error);
+            setError("Failed to generate content. Using fallback generator.");
+            return null;
         }
     };
 
     const generatePlot = async () => {
         setLoading(true);
         setTrailerAudioUrl('');
+        setError(null);
 
+        // First, generate plot elements
         const hasCameo = includeCameo();
         const plotElements = {
-            title: random(titles),
-            setting: random(settings),
-            formerProfession: random(formerProfessions),
-            currentJob: random(currentJobs),
-            plotTrigger: random(plotTriggers),
-            villain: random(villains),
-            villainGroup: random(villainGroups),
-            sidekick: random(sidekicks),
-            plotTwist: random(plotTwists),
-            vehicle: random(vehicles),
-            weapon: random(weapons),
-            actionScene: random(actionScenes),
-            villainHideout: random(villainHideouts),
-            bossFight: random(bossFights),
-            bossKill: hardcoreMode ? random(bossKills) : "defeated in an epic showdown",
+            setting: random(fallbackElements.settings),
+            formerProfession: random(fallbackElements.formerProfessions),
+            currentJob: random(fallbackElements.currentJobs),
+            plotTrigger: random(fallbackElements.plotTriggers),
+            villain: random(fallbackElements.villains),
+            villainGroup: random(fallbackElements.villainGroups),
+            sidekick: random(fallbackElements.sidekicks),
+            plotTwist: random(fallbackElements.plotTwists),
+            vehicle: random(fallbackElements.vehicles),
+            weapon: random(fallbackElements.weapons),
+            actionScene: random(fallbackElements.actionScenes),
+            villainHideout: random(fallbackElements.villainHideouts),
+            bossFight: random(fallbackElements.bossFights),
+            bossKill: hardcoreMode ? random(fallbackElements.bossKills) : "defeated in an epic showdown",
             hasCameo,
-            cameo: hasCameo ? random(cameos) : ''
+            cameo: hasCameo ? random(fallbackElements.cameos) : ''
         };
 
-        if (openaiEnabled && useAI) {
-            try {
-                const aiPlot = await generateMoviePlot(plotElements);
-                const aiTrailer = await generateMovieTrailer(plotElements);
+        try {
+            // Generate a title dynamically if using AI
+            if (openaiEnabled && useAI) {
+                plotElements.title = await generateDynamicTitle(plotElements);
+            } else {
+                plotElements.title = random(fallbackElements.titles);
+            }
 
-                if (aiPlot) {
+            // Generate AI content if enabled
+            if (openaiEnabled && useAI) {
+                const aiContent = await generateOpenAIContent(plotElements);
+
+                if (aiContent) {
+                    // If we received AI content with a title, use it
                     const fullPlot = {
                         ...plotElements,
-                        summary: aiPlot,
-                        trailer: aiTrailer || ''
+                        ...(aiContent.title ? { title: aiContent.title } : {}),
+                        summary: aiContent.plot || aiContent,
                     };
 
                     setPlot(fullPlot);
-                    setAiGeneratedPlot(aiPlot);
 
-                    if (aiTrailer) {
-                        setAiGeneratedTrailer(aiTrailer);
-                        if (trailerMode) {
-                            generateAudio(aiTrailer);
+                    // Generate trailer
+                    try {
+                        const aiTrailer = await generateMovieTrailer(fullPlot);
+                        if (aiTrailer) {
+                            setAiGeneratedTrailer(aiTrailer);
+                            fullPlot.trailer = aiTrailer;
+
+                            if (trailerMode) {
+                                generateAudio(aiTrailer);
+                            }
                         }
+                    } catch (trailerError) {
+                        console.error('Error generating trailer:', trailerError);
                     }
 
+                    // Pass the generated plot to parent component
                     if (onPlotGenerated) {
                         onPlotGenerated(fullPlot);
                     }
                 } else {
+                    // Fall back to basic plot if AI content failed
                     createBasicPlot(plotElements);
                 }
-            } catch (error) {
-                console.error('Error generating AI plot:', error);
+            } else {
+                // Just use the basic plot generator
                 createBasicPlot(plotElements);
             }
-        } else {
+        } catch (error) {
+            console.error('Error in plot generation:', error);
+            setError("Error generating plot. Using fallback generator.");
             createBasicPlot(plotElements);
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
 
     const createBasicPlot = (plotElements) => {
@@ -312,7 +358,12 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
         }
 
         if (openaiEnabled && useAI) {
-            generateOpenAIContent(plotElements);
+            // Try to enhance with AI afterward
+            try {
+                generateOpenAIContent(plotElements);
+            } catch (error) {
+                console.error('Error enhancing with AI:', error);
+            }
         }
     };
 
@@ -330,6 +381,7 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
     const getPlotText = () => {
         if (!plot) return "";
 
+        // Use AI-generated content if available
         if (openaiEnabled && useAI) {
             if (trailerMode && aiGeneratedTrailer) {
                 return aiGeneratedTrailer;
@@ -338,6 +390,7 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
             }
         }
 
+        // Fallback to template-based content
         const standardPlot = `
             In this action-packed thriller, Jason Statham plays a former ${plot.formerProfession} who now works as a ${plot.currentJob} trying to live a quiet life. But when ${plot.plotTrigger}, he's forced back into action.
 
@@ -430,6 +483,12 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
 
     return (
         <div className="movie-plot">
+            {error && (
+                <div className="error-message">
+                    {error}
+                </div>
+            )}
+
             {!plot ? (
                 <div>
                     {!studioMode && <p>Click the button to generate a Jason Statham movie!</p>}
@@ -466,7 +525,14 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                         onClick={generatePlot}
                         disabled={loading}
                     >
-                        {loading ? 'Generating...' : studioMode ? 'Generate' : 'Generate Movie'}
+                        {loading ? (
+                            <span>
+                                <span className="loading-spinner small"></span>
+                                Generating...
+                            </span>
+                        ) : (
+                            studioMode ? 'Generate' : 'Generate Movie'
+                        )}
                     </button>
                 </div>
             ) : (
@@ -488,7 +554,12 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                                             onClick={toggleAudio}
                                             disabled={isGeneratingAudio}
                                         >
-                                            {isGeneratingAudio ? 'Generating Audio...' : isPlayingAudio ? '⏸️ Pause' : '▶️ Play Trailer Voice'}
+                                            {isGeneratingAudio ? (
+                                                <span>
+                                                    <span className="loading-spinner small"></span>
+                                                    Generating Audio...
+                                                </span>
+                                            ) : isPlayingAudio ? '⏸️ Pause' : '▶️ Play Trailer Voice'}
                                         </button>
                                     </>
                                 ) : (
@@ -566,7 +637,12 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                             onClick={generatePlot}
                             disabled={loading}
                         >
-                            {loading ? 'Generating...' : 'Generate New Movie'}
+                            {loading ? (
+                                <span>
+                                    <span className="loading-spinner small"></span>
+                                    Generating...
+                                </span>
+                            ) : 'Generate New Movie'}
                         </button>
                     )}
                 </div>
