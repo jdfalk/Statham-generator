@@ -34,11 +34,27 @@ Use these standardized types to categorize your changes:
 - Don't capitalize first letter
 - No period at the end
 - Keep descriptions concise (50 chars or less)
-- Be specific and clear about what changed including file names and links to files
-- List all files that were changed in the body of the commit message with links to the files
-- Use bullet points for multiple files or changes
+- Be specific and clear about what changed
 - Avoid vague terms like "fixes" or "updates" without context
 - Ensure commit messages are formatted consistently
+
+## File Changes Documentation (REQUIRED)
+
+- **ALWAYS list ALL files that were changed in the body of the commit message**
+- Format each file listing with a brief summary of what changed, followed by a markdown link
+- Use bullet points for listing multiple files
+- Example:
+
+  ```markdown
+  Files changed:
+  - Added SSO provider implementation: [src/auth/SSOProvider.js](src/auth/SSOProvider.js)
+  - Updated auth context to support SSO flow: [src/auth/AuthContext.js](src/auth/AuthContext.js)
+  - Added SSO login button to form: [src/components/LoginForm.js](src/components/LoginForm.js)
+  ```
+
+- For repository links, use the full URL format: `Summary: [file.js](https://github.com/owner/repo/blob/branch/file.js)`
+- Include a clear, concise summary of what changed in each file
+- No commit should be submitted without this file change documentation
 
 ## Body Guidelines
 
@@ -48,6 +64,8 @@ Use these standardized types to categorize your changes:
 - Use blank line to separate from description
 - Wrap at 72 characters
 - Summarize the commits as the first line
+- **Always include a "Files changed:" section with a summary and markdown links for all modified files**
+- Organize file changes by type (added, modified, deleted) when appropriate
 
 ## Footer Guidelines
 
@@ -84,6 +102,11 @@ feat(auth): add SSO login option
 
 Implement single sign-on login functionality using OAuth2
 
+Files changed:
+- Added SSO provider implementation: [src/auth/SSOProvider.js](src/auth/SSOProvider.js)
+- Updated auth context to support SSO flow: [src/auth/AuthContext.js](src/auth/AuthContext.js)
+- Added SSO login button to form: [src/components/LoginForm.js](src/components/LoginForm.js)
+
 Closes #ISSUE_NUMBER  # Only include if there's an actual issue
 ```
 
@@ -93,11 +116,19 @@ fix(api): prevent race condition in user creation
 The previous implementation allowed concurrent requests to create
 duplicate users with the same email address.
 
+Files changed:
+- Added database locking mechanism: [src/api/userController.js](src/api/userController.js)
+- Enhanced email validation logic: [src/services/validation.js](src/services/validation.js)
+
 Fixes #ISSUE_NUMBER  # Only include if there's an actual issue
 ```
 
 ```text
 docs: update README with new API endpoints
+
+Files changed:
+- Added new endpoints documentation: [README.md](README.md)
+- Created detailed API reference: [docs/API.md](docs/API.md)
 ```
 
 ```text
@@ -105,8 +136,17 @@ feat(api)!: change response format to JSON API spec
 
 BREAKING CHANGE: API responses now follow JSON API specification.
 Clients will need to update their parsers.
+
+Files changed:
+- Implemented JSON API formatter: [src/api/responseFormatter.js](src/api/responseFormatter.js)
+- Updated middleware to use new format: [src/middleware/apiResponse.js](src/middleware/apiResponse.js)
+- Adjusted tests for new response structure: [tests/api/responses.test.js](tests/api/responses.test.js)
 ```
 
 ```text
 refactor(core): simplify error handling logic
+
+Files changed:
+- Consolidated error handlers: [src/core/errorHandler.js](src/core/errorHandler.js)
+- Created reusable error utilities: [src/utils/errors.js](src/utils/errors.js)
 ```
