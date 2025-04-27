@@ -5,6 +5,15 @@ import {
     generateTrailerAudio
 } from '../services/openaiService';
 
+/**
+ * Component for generating and displaying movie plots and trailers
+ *
+ * @param {Object} props - Component props
+ * @param {Function} props.onPlotGenerated - Callback when plot is generated
+ * @param {boolean} props.studioMode - Whether component is in studio mode
+ * @param {boolean} props.openaiEnabled - Whether OpenAI features are enabled
+ * @returns {JSX.Element} - React component
+ */
 function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false }) {
     const [plot, setPlot] = useState(null);
     const [trailerMode, setTrailerMode] = useState(false);
@@ -15,6 +24,7 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
     const [aiGeneratedTrailer, setAiGeneratedTrailer] = useState('');
     const [trailerAudioUrl, setTrailerAudioUrl] = useState('');
     const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+    const [isPlayingAudio, setIsPlayingAudio] = useState(false);
     const audioRef = useRef(null);
 
     const titles = [
@@ -157,6 +167,34 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
         }
     }, [studioMode]);
 
+    useEffect(() => {
+        if (audioRef.current) {
+            const audioElement = audioRef.current;
+
+            const handleEnded = () => {
+                setIsPlayingAudio(false);
+            };
+
+            const handlePlay = () => {
+                setIsPlayingAudio(true);
+            };
+
+            const handlePause = () => {
+                setIsPlayingAudio(false);
+            };
+
+            audioElement.addEventListener('ended', handleEnded);
+            audioElement.addEventListener('play', handlePlay);
+            audioElement.addEventListener('pause', handlePause);
+
+            return () => {
+                audioElement.removeEventListener('ended', handleEnded);
+                audioElement.removeEventListener('play', handlePlay);
+                audioElement.removeEventListener('pause', handlePause);
+            };
+        }
+    }, [audioRef.current]);
+
     const generateAudio = async (trailerText) => {
         if (!openaiEnabled || !trailerText) return;
 
@@ -165,6 +203,13 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
             const audioUrl = await generateTrailerAudio(trailerText);
             if (audioUrl) {
                 setTrailerAudioUrl(audioUrl);
+
+                if (audioRef.current) {
+                    setTimeout(() => {
+                        audioRef.current.play()
+                            .catch(err => console.error('Failed to auto-play audio:', err));
+                    }, 500);
+                }
             }
         } catch (error) {
             console.error('Failed to generate audio:', error);
@@ -199,37 +244,37 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
         setLoading(true);
         setTrailerAudioUrl('');
 
+        const hasCameo = includeCameo();
+        const plotElements = {
+            title: random(titles),
+            setting: random(settings),
+            formerProfession: random(formerProfessions),
+            currentJob: random(currentJobs),
+            plotTrigger: random(plotTriggers),
+            villain: random(villains),
+            villainGroup: random(villainGroups),
+            sidekick: random(sidekicks),
+            plotTwist: random(plotTwists),
+            vehicle: random(vehicles),
+            weapon: random(weapons),
+            actionScene: random(actionScenes),
+            villainHideout: random(villainHideouts),
+            bossFight: random(bossFights),
+            bossKill: hardcoreMode ? random(bossKills) : "defeated in an epic showdown",
+            hasCameo,
+            cameo: hasCameo ? random(cameos) : ''
+        };
+
         if (openaiEnabled && useAI) {
             try {
-                const hasCameo = includeCameo();
-                const plotElements = {
-                    title: random(titles),
-                    setting: random(settings),
-                    formerProfession: random(formerProfessions),
-                    currentJob: random(currentJobs),
-                    plotTrigger: random(plotTriggers),
-                    villain: random(villains),
-                    villainGroup: random(villainGroups),
-                    sidekick: random(sidekicks),
-                    plotTwist: random(plotTwists),
-                    vehicle: random(vehicles),
-                    weapon: random(weapons),
-                    actionScene: random(actionScenes),
-                    villainHideout: random(villainHideouts),
-                    bossFight: random(bossFights),
-                    bossKill: random(bossKills),
-                    hasCameo,
-                    cameo: hasCameo ? random(cameos) : ''
-                };
-
                 const aiPlot = await generateMoviePlot(plotElements);
-                const aiTrailer = trailerMode ? await generateMovieTrailer(plotElements) : '';
+                const aiTrailer = await generateMovieTrailer(plotElements);
 
                 if (aiPlot) {
                     const fullPlot = {
                         ...plotElements,
                         summary: aiPlot,
-                        trailer: aiTrailer
+                        trailer: aiTrailer || ''
                     };
 
                     setPlot(fullPlot);
@@ -246,50 +291,28 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                         onPlotGenerated(fullPlot);
                     }
                 } else {
-                    generateTemplatePlot();
+                    createBasicPlot(plotElements);
                 }
             } catch (error) {
                 console.error('Error generating AI plot:', error);
-                generateTemplatePlot();
+                createBasicPlot(plotElements);
             }
         } else {
-            generateTemplatePlot();
+            createBasicPlot(plotElements);
         }
 
         setLoading(false);
     };
 
-    const generateTemplatePlot = () => {
-        const hasCameo = includeCameo();
-
-        const newPlot = {
-            title: random(titles),
-            setting: random(settings),
-            formerProfession: random(formerProfessions),
-            currentJob: random(currentJobs),
-            plotTrigger: random(plotTriggers),
-            villain: random(villains),
-            villainGroup: random(villainGroups),
-            sidekick: random(sidekicks),
-            plotTwist: random(plotTwists),
-            vehicle: random(vehicles),
-            weapon: random(weapons),
-            actionScene: random(actionScenes),
-            villainHideout: random(villainHideouts),
-            bossFight: random(bossFights),
-            bossKill: hardcoreMode ? random(bossKills) : "defeated in an epic showdown",
-            cameo: hasCameo ? random(cameos) : '',
-            hasCameo
-        };
-
-        setPlot(newPlot);
-
-        if (openaiEnabled && useAI) {
-            generateOpenAIContent(newPlot);
-        }
+    const createBasicPlot = (plotElements) => {
+        setPlot(plotElements);
 
         if (onPlotGenerated) {
-            onPlotGenerated(newPlot);
+            onPlotGenerated(plotElements);
+        }
+
+        if (openaiEnabled && useAI) {
+            generateOpenAIContent(plotElements);
         }
     };
 
@@ -297,7 +320,8 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
         if (!audioRef.current) return;
 
         if (audioRef.current.paused) {
-            audioRef.current.play();
+            audioRef.current.play()
+                .catch(err => console.error('Failed to play audio:', err));
         } else {
             audioRef.current.pause();
         }
@@ -327,40 +351,81 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
         `;
 
         const trailerPlot = `
-            THIS SUMMER...
+            [DEEP VOICE]
 
-            One man. One mission. NO MERCY.
+            In a world where danger lurks around every corner...
+
+            [PAUSE]
+
+            One man stands between chaos and order.
+
+            [TENSION BUILDING MUSIC]
 
             Jason Statham is a former ${plot.formerProfession}...
 
-            "I left that life behind."
+            "I thought I left that life behind."
 
-            But when ${plot.plotTrigger}...
+            Now working as a ${plot.currentJob}, until...
 
-            "They've taken everything from me."
+            [DRAMATIC SOUND EFFECT]
 
-            THERE WILL BE VENGEANCE.
+            ${plot.plotTrigger.charAt(0).toUpperCase() + plot.plotTrigger.slice(1)}.
 
-            "I'm not just coming for you. I'm coming for EVERYONE."
+            [QUICK CUTS OF ACTION]
 
-            In a world of betrayal...
+            "They've taken EVERYTHING from me. Now I'll take EVERYTHING from them."
 
-            Armed with ${plot.weapon}...
+            [MUSIC INTENSIFIES]
+
+            In ${plot.setting}, he'll confront ${plot.villain}...
+
+            "Did you really think you could escape your past?"
+
+            ...and take down ${plot.villainGroup}.
+
+            [EXPLOSION SOUND]
 
             Witness ${plot.actionScene}...
 
-            ${plot.hasCameo ? `WITH ${plot.cameo.toUpperCase()}` : ''}
+            Armed with ${plot.weapon}...
 
-            "${plot.plotTwist.toUpperCase()}!"
+            ${plot.hasCameo ? `\nSpecial appearance by ${plot.cameo}...\n` : ''}
 
-            JASON STATHAM
+            But when ${plot.plotTwist}...
+
+            [DRAMATIC PAUSE]
+
+            "This ends NOW."
+
+            [MUSIC CLIMAX]
 
             ${plot.title.toUpperCase()}
 
-            SUMMER ${new Date().getFullYear()}
+            Vengeance has a name.
+
+            [IN THEATERS THIS SUMMER]
         `;
 
         return trailerMode ? trailerPlot : standardPlot;
+    };
+
+    const formatTrailerText = (text) => {
+        if (!text) return [];
+
+        return text.split('\n').map((line, i) => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) return <br key={i} />;
+
+            if (/^\[.*\]$/.test(trimmedLine)) {
+                return <p key={i} className="trailer-direction">{trimmedLine}</p>;
+            } else if (trimmedLine.startsWith('"') && trimmedLine.endsWith('"')) {
+                return <p key={i} className="trailer-dialogue">"{trimmedLine.slice(1, -1)}"</p>;
+            } else if (trimmedLine === trimmedLine.toUpperCase() && trimmedLine.length > 3) {
+                return <p key={i} className="trailer-emphasis">{trimmedLine}</p>;
+            } else {
+                return <p key={i} className="trailer-narration">{trimmedLine}</p>;
+            }
+        });
     };
 
     return (
@@ -408,32 +473,66 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                 <div>
                     <div className="plot-container">
                         <h2>{plot.title}</h2>
+
+                        {trailerMode && (
+                            <div className="audio-player">
+                                {trailerAudioUrl ? (
+                                    <>
+                                        <audio
+                                            ref={audioRef}
+                                            src={trailerAudioUrl}
+                                            onEnded={() => setIsPlayingAudio(false)}
+                                        />
+                                        <button
+                                            className={`audio-btn ${isPlayingAudio ? 'playing' : ''}`}
+                                            onClick={toggleAudio}
+                                            disabled={isGeneratingAudio}
+                                        >
+                                            {isGeneratingAudio ? 'Generating Audio...' : isPlayingAudio ? '⏸️ Pause' : '▶️ Play Trailer Voice'}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div className="audio-generating">
+                                        {isGeneratingAudio ? (
+                                            <p className="generating-message">
+                                                <span className="loading-spinner"></span>
+                                                Creating trailer voice audio...
+                                            </p>
+                                        ) : openaiEnabled && useAI ? (
+                                            <button
+                                                className="audio-btn"
+                                                onClick={() => generateAudio(aiGeneratedTrailer || getPlotText())}
+                                            >
+                                                🎙️ Generate Trailer Voice
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className={trailerMode ? 'trailer-text' : 'plot-text'}>
-                            {trailerMode && trailerAudioUrl && (
-                                <div className="audio-player">
-                                    <audio ref={audioRef} src={trailerAudioUrl} />
-                                    <button
-                                        className="audio-btn"
-                                        onClick={toggleAudio}
-                                        disabled={isGeneratingAudio}
-                                    >
-                                        {isGeneratingAudio ? 'Generating Audio...' : '▶️ Play Trailer Voice'}
-                                    </button>
+                            {trailerMode ? (
+                                <div className="trailer-script">
+                                    {formatTrailerText(getPlotText())}
                                 </div>
+                            ) : (
+                                getPlotText().split('\n').map((text, index) => (
+                                    <p key={index}>{text.trim()}</p>
+                                ))
                             )}
-                            {getPlotText().split('\n').map((text, index) => (
-                                <p key={index}>{text.trim()}</p>
-                            ))}
                         </div>
                     </div>
+
                     <div className="options">
                         <label>
                             <input
                                 type="checkbox"
                                 checked={trailerMode}
                                 onChange={() => {
+                                    const wasTrailerMode = trailerMode;
                                     setTrailerMode(!trailerMode);
-                                    if (!trailerMode && openaiEnabled && useAI) {
+                                    if (!wasTrailerMode && openaiEnabled && useAI && !trailerAudioUrl) {
                                         const trailerText = aiGeneratedTrailer || getPlotText();
                                         generateAudio(trailerText);
                                     }
@@ -460,6 +559,7 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                             </label>
                         )}
                     </div>
+
                     {!studioMode && (
                         <button
                             className="generate-btn"

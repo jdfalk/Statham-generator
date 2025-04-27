@@ -109,6 +109,9 @@ Write a complete, cohesive plot summary that incorporates these elements natural
 
 /**
  * Generate a movie trailer script using OpenAI
+ * This function creates a professional movie trailer voice-over script
+ * that sounds like it came from a real Hollywood trailer
+ *
  * @param {Object} openai - OpenAI client instance
  * @param {Object} plotElements - Elements to include in the trailer
  * @returns {Promise<string>} - Generated trailer script
@@ -119,22 +122,35 @@ async function generateMovieTrailer(openai, plotElements) {
         messages: [
             {
                 role: 'system',
-                content: 'You are a Hollywood trailer script writer specializing in intense, dramatic action movie trailers featuring Jason Statham. Create a script for a trailer voice-over that captures the essence of a Jason Statham movie - gritty, action-packed, and dramatic. Use the classic trailer voice style with punchy sentences and dramatic pauses.'
+                content: `You are Don LaFontaine, the legendary movie trailer voice-over artist known for iconic phrases like "In a world..."
+Create an engaging, dramatic trailer script for a Jason Statham action movie.
+
+Guidelines for an authentic movie trailer script:
+- Write in short, punchy sentences with dramatic pauses
+- Use present tense and active voice
+- Include iconic trailer phrases like "One man...", "In a world where...", etc.
+- Format the script with clear PAUSES, EMPHASIZED WORDS, and sound effect indicators [BOOM]
+- Maintain a rhythm of building tension and excitement
+- Keep it under 60 seconds when read aloud (about 150 words)
+- End with the movie title and a powerful tagline
+- Include text that indicates how certain words should be delivered (whispered, shouted, etc.)
+- The script should be immediately ready for voice recording`
             },
             {
                 role: 'user',
-                content: `Create a movie trailer script for a Jason Statham film titled "${plotElements.title}" with these elements:
+                content: `Create a dramatic movie trailer voice-over script for a Jason Statham film titled "${plotElements.title}" with these elements:
 
 Plot summary: ${plotElements.summary || "Use the plot elements below to craft a cohesive narrative"}
 Setting: ${plotElements.setting}
-Statham's background: ${plotElements.formerProfession}, now ${plotElements.currentJob}
+Statham's background: Former ${plotElements.formerProfession}, now ${plotElements.currentJob}
 Main conflict: ${plotElements.plotTrigger}
 Villain: ${plotElements.villain} and their ${plotElements.villainGroup}
 Key action: ${plotElements.actionScene}
 Plot twist: ${plotElements.plotTwist}
 Final confrontation: ${plotElements.bossFight}
+${plotElements.hasCameo ? `Special appearance by: ${plotElements.cameo}` : ''}
 
-Write only the trailer voice-over narration script. Make it dramatic, intense, and highlight Jason Statham's character. Include classic trailer phrases like "In a world where..." or "One man..." if appropriate. Keep it under 200 words.`
+Write ONLY the trailer voice-over narration script as it would be performed by Don LaFontaine. Format it so it's instantly ready for voice recording, with indications for dramatic pauses, emphasis, and tone.`
             }
         ],
         max_tokens: 350,
@@ -189,28 +205,48 @@ For Part 2, be specific about visual elements, composition, positioning, color s
 }
 
 /**
- * Generate trailer audio using OpenAI
+ * Generate trailer audio using OpenAI's TTS service
  * @param {Object} openai - OpenAI client instance
  * @param {string} trailerText - Trailer script text
  * @returns {Promise<string>} - Base64-encoded audio data
  */
 async function generateTrailerAudio(openai, { trailerText }) {
-    const maxLength = 4000; // OpenAI has a character limit
-    const truncatedText = trailerText.length > maxLength
-        ? trailerText.substring(0, maxLength) + '...'
-        : trailerText;
+    // Prepare the script for TTS by cleaning up any formatting
+    let script = trailerText;
 
-    const response = await openai.audio.speech.create({
-        model: 'tts-1',
-        voice: 'onyx', // Deep, dramatic voice perfect for movie trailers
-        input: truncatedText,
-    });
+    // Replace common formatting patterns for better speech synthesis
+    script = script.replace(/\[([^\]]+)\]/g, ''); // Remove sound effect indicators
+    script = script.replace(/\(([^)]+)\)/g, ''); // Remove direction notes
+    script = script.replace(/\*([^*]+)\*/g, '$1'); // Remove asterisks but keep text
 
-    // Convert the response to a base64 string for transport
-    const buffer = await response.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
+    // Add appropriate pauses
+    script = script.replace(/\.\.\./g, ' <break time="1s"/> ');
+    script = script.replace(/\./g, '. <break time="0.5s"/> ');
 
-    return base64;
+    // Truncate if needed (TTS-1 has a character limit)
+    const maxLength = 4000;
+    if (script.length > maxLength) {
+        script = script.substring(0, maxLength) + '...';
+    }
+
+    try {
+        const response = await openai.audio.speech.create({
+            model: 'tts-1-hd', // Use HD model for better quality
+            voice: 'onyx', // Deep, dramatic voice perfect for movie trailers
+            input: script,
+            response_format: 'mp3',
+            speed: 0.95, // Slightly slower for dramatic effect
+        });
+
+        // Convert the response to a base64 string for transport
+        const buffer = await response.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+
+        return base64;
+    } catch (error) {
+        console.error('Error generating trailer audio:', error);
+        throw error;
+    }
 }
 
 /**
