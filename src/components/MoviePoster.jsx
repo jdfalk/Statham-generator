@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { generatePosterDescription, generateMoviePoster } from '../services/openaiService';
 
+/**
+ * MoviePoster component - Renders a movie poster concept or generates an AI poster image
+ *
+ * @param {Object} plot - The plot information with title, setting, villain, etc.
+ * @param {boolean} openaiEnabled - Whether OpenAI API is available
+ * @returns {React.Component} - Rendered component
+ */
 function MoviePoster({ plot, openaiEnabled = false }) {
     const [posterStyle, setPosterStyle] = useState('action'); // action, artsy, vintage
     const [aiPosterDescription, setAiPosterDescription] = useState('');
@@ -8,7 +15,7 @@ function MoviePoster({ plot, openaiEnabled = false }) {
     const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [useAI, setUseAI] = useState(true);
-    const [useSora, setUseSora] = useState(true);
+    const [useImageGen, setUseImageGen] = useState(true);
     const [error, setError] = useState(null);
 
     // Poster concepts
@@ -83,6 +90,35 @@ function MoviePoster({ plot, openaiEnabled = false }) {
 
     const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+    /**
+     * Generate custom plot details to enhance poster generation
+     * @returns {Object} - Enhanced plot details
+     */
+    const getEnhancedPlotDetails = () => {
+        if (!plot) return {};
+
+        const plotText = plot.plot || '';
+        const weapons = plotText.match(/signature (.*?) loaded|armed with (.*?) and|using (.*?) to fight/i);
+        const weapon = weapons ? (weapons[1] || weapons[2] || weapons[3]) : 'dual pistols';
+
+        // Extract key visual elements from the plot
+        const visualElements = {
+            weapon: weapon || 'dual pistols',
+            villain: plot.villain || 'tech billionaire',
+            setting: plot.setting || 'Tokyo streets',
+            action: plotText.includes('chase') ? 'high-speed chase' :
+                plotText.includes('shootout') ? 'intense shootout' :
+                    'explosive action sequence'
+        };
+
+        // Check if specific notable locations are mentioned in the plot
+        if (plotText.includes('Tokyo')) {
+            visualElements.location = 'neon-lit Tokyo streets';
+        }
+
+        return visualElements;
+    };
+
     // Generate OpenAI poster description when plot or poster style changes
     useEffect(() => {
         if (plot && openaiEnabled && useAI) {
@@ -90,7 +126,9 @@ function MoviePoster({ plot, openaiEnabled = false }) {
         }
     }, [plot, posterStyle, useAI]);
 
-    // Generate a poster description using OpenAI
+    /**
+     * Generate a poster description using OpenAI
+     */
     const generateAIPosterDescription = async () => {
         if (!plot || !openaiEnabled || !useAI) return;
 
@@ -102,8 +140,8 @@ function MoviePoster({ plot, openaiEnabled = false }) {
             if (description) {
                 setAiPosterDescription(description);
 
-                // Generate poster image with SORA if enabled
-                if (useSora) {
+                // Generate poster image with DALL-E if enabled
+                if (useImageGen) {
                     generatePosterImage();
                 }
             }
@@ -115,30 +153,41 @@ function MoviePoster({ plot, openaiEnabled = false }) {
         }
     };
 
-    // Generate a poster image using SORA
+    /**
+     * Generate a poster image using DALL-E 3
+     */
     const generatePosterImage = async () => {
-        if (!plot || !openaiEnabled || !useAI || !useSora) return;
+        if (!plot || !openaiEnabled || !useAI || !useImageGen) return;
 
         setIsGeneratingImage(true);
         setError(null);
         setPosterImageUrl('');
 
         try {
-            const imageUrl = await generateMoviePoster(plot, posterStyle);
+            // Get enhanced plot details for better image generation
+            const enhancedPlot = {
+                ...plot,
+                ...getEnhancedPlotDetails()
+            };
+
+            const imageUrl = await generateMoviePoster(enhancedPlot, posterStyle);
             if (imageUrl) {
                 setPosterImageUrl(imageUrl);
             } else {
                 throw new Error('No image URL returned');
             }
         } catch (error) {
-            console.error('Error generating poster image with SORA:', error);
+            console.error('Error generating poster image with DALL-E:', error);
             setError('Failed to generate poster image. Please try again.');
         } finally {
             setIsGeneratingImage(false);
         }
     };
 
-    // Generate a poster concept based on the plot and selected style
+    /**
+     * Generate a poster concept based on the plot and selected style
+     * @returns {Object|null} - Generated poster concept
+     */
     const generatePosterConcept = () => {
         if (!plot) return null;
 
@@ -157,7 +206,10 @@ function MoviePoster({ plot, openaiEnabled = false }) {
 
     const posterConcept = plot ? generatePosterConcept() : null;
 
-    // Handle style change
+    /**
+     * Handle style change
+     * @param {string} style - The new poster style
+     */
     const handleStyleChange = (style) => {
         setPosterStyle(style);
         // Clear the current poster image when style changes
@@ -209,19 +261,19 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                                 </label>
 
                                 {useAI && (
-                                    <label className="sora-toggle">
+                                    <label className="image-toggle">
                                         <input
                                             type="checkbox"
-                                            checked={useSora}
+                                            checked={useImageGen}
                                             onChange={() => {
-                                                const newUseSora = !useSora;
-                                                setUseSora(newUseSora);
-                                                if (newUseSora && !posterImageUrl) {
+                                                const newUseImageGen = !useImageGen;
+                                                setUseImageGen(newUseImageGen);
+                                                if (newUseImageGen && !posterImageUrl) {
                                                     generatePosterImage();
                                                 }
                                             }}
                                         />
-                                        SORA Poster
+                                        Generate Image
                                     </label>
                                 )}
                             </>
@@ -235,9 +287,9 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                     )}
 
                     <div className={`poster-concept ${posterStyle}`}>
-                        {/* Display SORA-generated poster if available */}
+                        {/* Display AI-generated poster if available */}
                         {posterImageUrl && (
-                            <div className="sora-poster-image">
+                            <div className="poster-image">
                                 <img src={posterImageUrl} alt={`${plot.title} movie poster`} />
                             </div>
                         )}
@@ -246,7 +298,7 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                         {isGeneratingImage && (
                             <div className="generating-poster">
                                 <div className="loading-spinner"></div>
-                                <p>Generating movie poster with SORA...</p>
+                                <p>Generating movie poster with DALL-E...</p>
                                 <p className="small">(This may take a minute)</p>
                             </div>
                         )}
@@ -302,15 +354,15 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                             <p>COMING SOON</p>
                         </div>
 
-                        {/* Add Generate button for Sora posters */}
-                        {openaiEnabled && useAI && useSora && !isGeneratingImage && (
+                        {/* Add Generate button for poster generation */}
+                        {openaiEnabled && useAI && useImageGen && !isGeneratingImage && (
                             <div className="generate-poster-btn">
                                 <button
                                     onClick={generatePosterImage}
                                     disabled={isGeneratingImage}
                                     className="generate-btn"
                                 >
-                                    {posterImageUrl ? 'Regenerate Poster' : 'Generate SORA Poster'}
+                                    {posterImageUrl ? 'Regenerate Poster' : 'Generate Poster'}
                                 </button>
                             </div>
                         )}

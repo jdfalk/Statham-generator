@@ -470,21 +470,52 @@ async function generateMoviePoster(openai, params) {
             throw new Error('Missing required parameters: plot and style');
         }
 
-        const { title, formerProfession, setting, villain, hasCameo, cameo } = plot;
+        const { title, formerProfession, setting, villain, hasCameo, cameo, weapon, location, action } = plot;
 
-        // Create a direct, focused prompt for DALL-E 3
-        const posterPrompt = `Create a professional movie poster for an action film titled "${title}" starring Jason Statham.
+        // Extract specific details that make this poster unique
+        const plotText = plot.plot || '';
+        const isTokyo = plotText.toLowerCase().includes('tokyo') || setting.toLowerCase().includes('tokyo');
+        const hasStreetRacing = plotText.toLowerCase().includes('street racing') || plotText.toLowerCase().includes('racing circuit');
+        const hasDualPistols = plotText.toLowerCase().includes('dual pistols') || weapon === 'dual pistols';
+        const hasNeonLights = isTokyo || plotText.toLowerCase().includes('neon');
+
+        // Additional visual elements based on plot
+        const visualElements = [];
+        if (isTokyo) visualElements.push('neon-lit Tokyo skyline');
+        if (hasStreetRacing) visualElements.push('illegal street racing scene');
+        if (hasDualPistols) visualElements.push('dual pistols drawn and ready');
+        if (hasNeonLights) visualElements.push('vibrant neon signs reflecting on wet streets');
+        if (plotText.includes('warehouse')) visualElements.push('industrial warehouse setting');
+
+        // Create a poster prompt that incorporates specific elements from the Tokyo Revolt plot
+        let posterPrompt = `Create a professional movie poster for an action film titled "${title}" starring Jason Statham.
 
 Style: ${style === 'action' ? 'High-contrast action movie poster with dramatic lighting, explosions, and urban environments. Blues and oranges color scheme.' :
           style === 'artsy' ? 'Minimalist artistic movie poster with bold colors, negative space, and symbolic imagery rather than literal representation.' :
           'Vintage retro movie poster with grainy textures, faded colors, and a 1970s-80s aesthetic like classic action films.'}
 
-Setting: ${setting}
-Jason Statham plays: A former ${formerProfession}
+Setting: ${isTokyo ? 'Neon-lit Tokyo streets with vibrant city lights and reflective wet pavement' : setting}
+Jason Statham plays: A former ${formerProfession} ${hasStreetRacing ? 'now involved in illegal street racing' : ''}
 Main villain: ${villain}
 ${hasCameo ? `Also featuring: ${cameo}` : ''}
 
-The poster must have the movie title "${title.toUpperCase()}" prominently displayed. Show Jason Statham in a dynamic action pose. Make it look like a professional Hollywood movie poster that would appear in theaters.`;
+The poster must include:
+- The movie title "${title.toUpperCase()}" prominently displayed in bold, ${style === 'action' ? 'high-impact' : style === 'artsy' ? 'artistic' : 'retro'} typography
+- Jason Statham in a dynamic action pose ${hasDualPistols ? 'with dual pistols drawn' : 'ready for action'}`;
+
+        // Add visual elements based on plot specifics
+        if (visualElements.length > 0) {
+            posterPrompt += `\n- Visual elements: ${visualElements.join(', ')}`;
+        }
+
+        // Add style-specific elements
+        if (style === 'action') {
+            posterPrompt += `\n\nCreate a high-energy, dramatic movie poster with intense lighting. Use a color palette dominated by neon blues and fiery oranges. The poster should feel like a blockbuster action thriller, with Jason Statham as the central focus in a heroic, dynamic pose against the ${isTokyo ? 'Tokyo cityscape' : setting} backdrop.`;
+        } else if (style === 'artsy') {
+            posterPrompt += `\n\nCreate an artistic, stylized movie poster with a bold, minimalist approach. Use striking color contrasts and negative space. Incorporate symbolic elements representing ${isTokyo ? 'Tokyo' : setting} and the conflict with ${villain}. The design should be unconventional yet visually powerful.`;
+        } else { // vintage
+            posterPrompt += `\n\nCreate a vintage-style movie poster reminiscent of 1970s-80s action films. Include a grainy texture, slightly faded colors, and classic composition. The poster should have a retro typography style and potentially feature multiple action vignettes arranged in a classic layout.`;
+        }
 
         console.log('Generating poster with prompt:', posterPrompt);
 
