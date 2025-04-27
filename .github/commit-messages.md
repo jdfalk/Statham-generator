@@ -35,7 +35,7 @@ Use these standardized types to categorize your changes:
 - No period at the end
 - Keep descriptions concise (50 chars or less)
 - Be specific and clear about what changed including file names and links to files
-- List all files that were changed in the body of the commit message
+- List all files that were changed in the body of the commit message with links to the files
 - Use bullet points for multiple files or changes
 - Avoid vague terms like "fixes" or "updates" without context
 - Ensure commit messages are formatted consistently
