@@ -197,15 +197,77 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
 
     const generatePlot = async () => {
         setLoading(true);
+        setTrailerAudioUrl('');
+
+        if (openaiEnabled && useAI) {
+            try {
+                const hasCameo = includeCameo();
+                const plotElements = {
+                    title: random(titles),
+                    setting: random(settings),
+                    formerProfession: random(formerProfessions),
+                    currentJob: random(currentJobs),
+                    plotTrigger: random(plotTriggers),
+                    villain: random(villains),
+                    villainGroup: random(villainGroups),
+                    sidekick: random(sidekicks),
+                    plotTwist: random(plotTwists),
+                    vehicle: random(vehicles),
+                    weapon: random(weapons),
+                    actionScene: random(actionScenes),
+                    villainHideout: random(villainHideouts),
+                    bossFight: random(bossFights),
+                    bossKill: random(bossKills),
+                    hasCameo,
+                    cameo: hasCameo ? random(cameos) : ''
+                };
+
+                const aiPlot = await generateMoviePlot(plotElements);
+                const aiTrailer = trailerMode ? await generateMovieTrailer(plotElements) : '';
+
+                if (aiPlot) {
+                    const fullPlot = {
+                        ...plotElements,
+                        summary: aiPlot,
+                        trailer: aiTrailer
+                    };
+
+                    setPlot(fullPlot);
+                    setAiGeneratedPlot(aiPlot);
+
+                    if (aiTrailer) {
+                        setAiGeneratedTrailer(aiTrailer);
+                        if (trailerMode) {
+                            generateAudio(aiTrailer);
+                        }
+                    }
+
+                    if (onPlotGenerated) {
+                        onPlotGenerated(fullPlot);
+                    }
+                } else {
+                    generateTemplatePlot();
+                }
+            } catch (error) {
+                console.error('Error generating AI plot:', error);
+                generateTemplatePlot();
+            }
+        } else {
+            generateTemplatePlot();
+        }
+
+        setLoading(false);
+    };
+
+    const generateTemplatePlot = () => {
         const hasCameo = includeCameo();
-        const cameo = hasCameo ? random(cameos) : null;
 
         const newPlot = {
             title: random(titles),
+            setting: random(settings),
             formerProfession: random(formerProfessions),
             currentJob: random(currentJobs),
             plotTrigger: random(plotTriggers),
-            setting: random(settings),
             villain: random(villains),
             villainGroup: random(villainGroups),
             sidekick: random(sidekicks),
@@ -216,17 +278,15 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
             villainHideout: random(villainHideouts),
             bossFight: random(bossFights),
             bossKill: hardcoreMode ? random(bossKills) : "defeated in an epic showdown",
-            cameo: cameo,
-            hasCameo: hasCameo
+            cameo: hasCameo ? random(cameos) : '',
+            hasCameo
         };
 
         setPlot(newPlot);
 
         if (openaiEnabled && useAI) {
-            await generateOpenAIContent(newPlot);
+            generateOpenAIContent(newPlot);
         }
-
-        setLoading(false);
 
         if (onPlotGenerated) {
             onPlotGenerated(newPlot);
