@@ -72,6 +72,10 @@ export default async function handler(request, response) {
                 result = await executeWithRetry(() => generatePosterDescription(openai, { plot: reqBody.plot, style: reqBody.style }));
                 return response.status(200).json({ description: result });
 
+            case 'generateMoviePoster':
+                result = await executeWithRetry(() => generateMoviePoster(openai, { plot: reqBody.plot, style: reqBody.style }));
+                return response.status(200).json({ imageUrl: result });
+
             case 'generateMovieTrailer':
                 result = await executeWithRetry(() => generateMovieTrailer(openai, reqBody.plotElements));
                 return response.status(200).json({ trailer: result });
@@ -394,6 +398,79 @@ For Part 2, be specific about visual elements, composition, positioning, color s
 }
 
 /**
+ * Generate a movie poster using OpenAI's SORA video generation API
+ * @param {Object} openai - OpenAI client instance
+ * @param {Object} params - Parameters including plot elements and style
+ * @returns {Promise<string>} - URL to the generated poster image
+ */
+async function generateMoviePoster(openai, params) {
+    try {
+        const { plot, style } = params;
+        if (!plot || !style) {
+            throw new Error('Missing required parameters: plot and style');
+        }
+
+        const { title, formerProfession, setting, villain, hasCameo, cameo } = plot;
+
+        // Generate a detailed poster description for SORA
+        const posterDescriptionPrompt = `
+            Create a detailed description of a movie poster for an action film titled "${title}" starring Jason Statham.
+
+            Style: ${style} (${style === 'action' ? 'high-contrast with dramatic lighting, explosions' :
+                style === 'artsy' ? 'minimalist, artistic approach with bold colors' :
+                    'retro style with grainy textures, faded colors, 1970s-80s aesthetic'})
+
+            Setting: ${setting}
+            Jason Statham's character: A former ${formerProfession}
+            Main villain or threat: ${villain}
+            ${hasCameo ? `Special appearance by: ${cameo}` : ''}
+
+            Focus on describing a single, high-quality, photorealistic movie poster image with detailed visual elements.
+            Describe Jason Statham's appearance, pose, and expression. Include action elements, dramatic lighting, and composition.
+            Make it look like a professional Hollywood movie poster with the title prominently displayed.
+        `;
+
+        // Generate detailed visual description using GPT-4 for better quality
+        const descriptionResponse = await openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a professional movie poster designer. Create detailed visual descriptions for movie posters that could be used to generate images. Be specific about visual elements, composition, lighting, and atmosphere.'
+                },
+                { role: 'user', content: posterDescriptionPrompt }
+            ],
+            max_tokens: 700,
+            temperature: 0.7,
+        });
+
+        const posterDescription = descriptionResponse.choices[0].message.content.trim();
+        console.log('SORA poster description:', posterDescription);
+
+        // Use SORA to generate the poster image
+        const imageResponse = await openai.images.generate({
+            model: "sora-1.0",  // SORA model for photorealistic image generation
+            prompt: posterDescription,
+            n: 1,               // Generate one image
+            size: "1024x1536",  // Portrait orientation for movie poster
+            quality: "hd",      // High quality
+            response_format: "url"
+        });
+
+        // Get the URL from the response
+        const imageUrl = imageResponse.data[0].url;
+
+        // For production, you would save this image to your own storage
+        // and return a URL to that stored image. For now, just return the OpenAI URL.
+        return imageUrl;
+
+    } catch (error) {
+        console.error('Error generating movie poster with SORA:', error);
+        throw error;
+    }
+}
+
+/**
  * Generate trailer audio using OpenAI's TTS service
  * @param {Object} openai - OpenAI client instance
  * @param {Object} params - Parameters including trailer text
@@ -419,17 +496,31 @@ async function generateTrailerAudio(openai, params) {
         script = script.replace(/\.\.\./g, ' <break time="1s"/> ');
         script = script.replace(/\./g, '. <break time="0.5s"/> ');
 
+        // Fix Statham pronunciation using SSML phonetics
+        // Replace all instances of "Statham" with the phonetic pronunciation "Stay-thum"
+        script = script.replace(/Statham/gi, '<phoneme alphabet="ipa" ph="steɪθəm">Statham</phoneme>');
+
+        // Improve overall voice quality with SSML markup
+        script = `<speak>
+            <prosody rate="95%" pitch="+0%" volume="loud">
+                ${script}
+            </prosody>
+        </speak>`;
+
         // Truncate if needed (TTS-1 has a character limit)
-        const maxLength = 3000; // Reduced to be safe
+        const maxLength = 4000; // Increased slightly for SSML tags
         if (script.length > maxLength) {
             console.warn(`Trailer script too long (${script.length} chars), truncating to ${maxLength}`);
-            script = script.substring(0, maxLength) + '...';
+            // Try to find a good place to cut, such as at a sentence or paragraph break
+            const truncated = script.substring(0, maxLength);
+            // Make sure we close any open SSML tags
+            script = truncated.includes('</speak>') ? truncated : `${truncated}</prosody></speak>`;
         }
 
         console.log('Sending TTS request with script length:', script.length);
 
         const response = await openai.audio.speech.create({
-            model: 'tts-1', // Use standard TTS as HD might cause issues
+            model: 'tts-1-hd', // Use HD model for better quality
             voice: 'onyx', // Deep, dramatic voice perfect for movie trailers
             input: script,
             response_format: 'mp3',

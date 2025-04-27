@@ -256,6 +256,24 @@ export async function generatePosterDescription(plot, style) {
 }
 
 /**
+ * Generates a movie poster using OpenAI's SORA API
+ *
+ * @param {Object} plot - The plot elements
+ * @param {string} style - Poster style (action, artsy, vintage)
+ * @returns {Promise<string>} - URL to the generated poster image
+ */
+export async function generateMoviePoster(plot, style) {
+    try {
+        const response = await fetchWithRetry('generateMoviePoster', { plot, style });
+        const data = await response.json();
+        return data.imageUrl || "";
+    } catch (error) {
+        console.error('Error calling generateMoviePoster:', error);
+        throw error;
+    }
+}
+
+/**
  * Generates audio for a movie trailer
  *
  * @param {string} trailerText - Text of the trailer to convert to audio
@@ -320,6 +338,7 @@ export default {
     generateMoviePlot,
     generateMovieTrailer,
     generatePosterDescription,
+    generateMoviePoster,
     generateTrailerAudio,
     generateMultipleMovies
 };

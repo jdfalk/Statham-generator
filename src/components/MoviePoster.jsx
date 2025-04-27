@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { generatePosterDescription } from '../services/openaiService';
+import { generatePosterDescription, generateMoviePoster } from '../services/openaiService';
 
 function MoviePoster({ plot, openaiEnabled = false }) {
     const [posterStyle, setPosterStyle] = useState('action'); // action, artsy, vintage
     const [aiPosterDescription, setAiPosterDescription] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [posterImageUrl, setPosterImageUrl] = useState('');
+    const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [useAI, setUseAI] = useState(true);
+    const [useSora, setUseSora] = useState(true);
+    const [error, setError] = useState(null);
 
     // Poster concepts
     const posterConcepts = {
@@ -90,16 +94,47 @@ function MoviePoster({ plot, openaiEnabled = false }) {
     const generateAIPosterDescription = async () => {
         if (!plot || !openaiEnabled || !useAI) return;
 
-        setIsGenerating(true);
+        setIsGeneratingDescription(true);
+        setError(null);
+
         try {
             const description = await generatePosterDescription(plot, posterStyle);
             if (description) {
                 setAiPosterDescription(description);
+
+                // Generate poster image with SORA if enabled
+                if (useSora) {
+                    generatePosterImage();
+                }
             }
         } catch (error) {
             console.error('Error generating poster description:', error);
+            setError('Failed to generate poster description. Please try again.');
         } finally {
-            setIsGenerating(false);
+            setIsGeneratingDescription(false);
+        }
+    };
+
+    // Generate a poster image using SORA
+    const generatePosterImage = async () => {
+        if (!plot || !openaiEnabled || !useAI || !useSora) return;
+
+        setIsGeneratingImage(true);
+        setError(null);
+        setPosterImageUrl('');
+
+        try {
+            const imageUrl = await generateMoviePoster(plot, posterStyle);
+            if (imageUrl) {
+                setPosterImageUrl(imageUrl);
+            } else {
+                throw new Error('No image URL returned');
+            }
+        } catch (error) {
+            console.error('Error generating poster image with SORA:', error);
+            setError('Failed to generate poster image. Please try again.');
+        } finally {
+            setIsGeneratingImage(false);
         }
     };
 
@@ -122,9 +157,16 @@ function MoviePoster({ plot, openaiEnabled = false }) {
 
     const posterConcept = plot ? generatePosterConcept() : null;
 
+    // Handle style change
+    const handleStyleChange = (style) => {
+        setPosterStyle(style);
+        // Clear the current poster image when style changes
+        setPosterImageUrl('');
+    };
+
     return (
         <div className="movie-poster">
-            <h3>Movie Poster Concept</h3>
+            <h3>Movie Poster</h3>
 
             {!plot ? (
                 <p>Generate a plot first to see a poster concept!</p>
@@ -133,73 +175,125 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                     <div className="poster-styles">
                         <button
                             className={posterStyle === 'action' ? 'active' : ''}
-                            onClick={() => setPosterStyle('action')}
+                            onClick={() => handleStyleChange('action')}
                         >
                             Action
                         </button>
                         <button
                             className={posterStyle === 'artsy' ? 'active' : ''}
-                            onClick={() => setPosterStyle('artsy')}
+                            onClick={() => handleStyleChange('artsy')}
                         >
                             Artistic
                         </button>
                         <button
                             className={posterStyle === 'vintage' ? 'active' : ''}
-                            onClick={() => setPosterStyle('vintage')}
+                            onClick={() => handleStyleChange('vintage')}
                         >
                             Vintage
                         </button>
 
                         {openaiEnabled && (
-                            <label className="ai-toggle">
-                                <input
-                                    type="checkbox"
-                                    checked={useAI}
-                                    onChange={() => setUseAI(!useAI)}
-                                />
-                                AI Descriptions
-                            </label>
+                            <>
+                                <label className="ai-toggle">
+                                    <input
+                                        type="checkbox"
+                                        checked={useAI}
+                                        onChange={() => {
+                                            setUseAI(!useAI);
+                                            if (!useAI) {
+                                                setPosterImageUrl('');
+                                            }
+                                        }}
+                                    />
+                                    AI Descriptions
+                                </label>
+
+                                {useAI && (
+                                    <label className="sora-toggle">
+                                        <input
+                                            type="checkbox"
+                                            checked={useSora}
+                                            onChange={() => {
+                                                const newUseSora = !useSora;
+                                                setUseSora(newUseSora);
+                                                if (newUseSora && !posterImageUrl) {
+                                                    generatePosterImage();
+                                                }
+                                            }}
+                                        />
+                                        SORA Poster
+                                    </label>
+                                )}
+                            </>
                         )}
                     </div>
 
+                    {error && (
+                        <div className="error-message">
+                            {error}
+                        </div>
+                    )}
+
                     <div className={`poster-concept ${posterStyle}`}>
-                        <div className="poster-title">
-                            <h2>{plot.title.toUpperCase()}</h2>
-                        </div>
-
-                        <div className="poster-tagline">
-                            <p>"{openaiEnabled && useAI && aiPosterDescription ?
-                                aiPosterDescription.split('\n')[0] :
-                                posterConcept.tagline}"</p>
-                        </div>
-
-                        <div className="poster-visualization">
-                            <h4>POSTER VISUALIZATION</h4>
-                            {isGenerating ? (
-                                <p className="generating-text">Generating AI poster concept...</p>
-                            ) : (
-                                <>
-                                    {openaiEnabled && useAI && aiPosterDescription ? (
-                                        <div className="ai-poster-description">
-                                            {aiPosterDescription.split('\n').slice(1).map((line, i) => (
-                                                <p key={i}>{line}</p>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p>{posterConcept.visualTheme}</p>
-                                    )}
-                                </>
-                            )}
-
-                            <div className="poster-details">
-                                <p><strong>Style:</strong> {posterStyle}</p>
-                                <p><strong>Featuring:</strong> Jason Statham as a former {plot.formerProfession}</p>
-                                {plot.hasCameo && <p><strong>With:</strong> {plot.cameo}</p>}
-                                <p><strong>Setting:</strong> {plot.setting}</p>
-                                {!openaiEnabled && (
-                                    <p><strong>Key Visual:</strong> {posterConcept.layout}</p>
-                                )}
+                        {/* Display SORA-generated poster if available */}
+                        {posterImageUrl && (
+                            <div className="sora-poster-image">
+                                <img src={posterImageUrl} alt={`${plot.title} movie poster`} />
                             </div>
+                        )}
+
+                        {/* Show loading indicator while generating image */}
+                        {isGeneratingImage && (
+                            <div className="generating-poster">
+                                <div className="loading-spinner"></div>
+                                <p>Generating movie poster with SORA...</p>
+                                <p className="small">(This may take a minute)</p>
+                            </div>
+                        )}
+
+                        {/* Only show the text concept if no image is being generated or displayed */}
+                        {!posterImageUrl && !isGeneratingImage && (
+                            <>
+                                <div className="poster-title">
+                                    <h2>{plot.title.toUpperCase()}</h2>
+                                </div>
+
+                                <div className="poster-tagline">
+                                    <p>"{openaiEnabled && useAI && aiPosterDescription ?
+                                        aiPosterDescription.split('\n')[0] :
+                                        posterConcept.tagline}"</p>
+                                </div>
+
+                                <div className="poster-visualization">
+                                    <h4>POSTER VISUALIZATION</h4>
+                                    {isGeneratingDescription ? (
+                                        <p className="generating-text">Generating AI poster concept...</p>
+                                    ) : (
+                                        <>
+                                            {openaiEnabled && useAI && aiPosterDescription ? (
+                                                <div className="ai-poster-description">
+                                                    {aiPosterDescription.split('\n').slice(1).map((line, i) => (
+                                                        <p key={i}>{line}</p>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p>{posterConcept.visualTheme}</p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        {/* Always show the details section */}
+                        <div className="poster-details">
+                            <p><strong>Style:</strong> {posterStyle}</p>
+                            <p><strong>Featuring:</strong> Jason Statham as a former {plot.formerProfession}</p>
+                            {plot.hasCameo && <p><strong>With:</strong> {plot.cameo}</p>}
+                            <p><strong>Setting:</strong> {plot.setting}</p>
+                            {!openaiEnabled && (
+                                <p><strong>Key Visual:</strong> {posterConcept.layout}</p>
+                            )}
                         </div>
 
                         <div className="poster-credits">
@@ -207,6 +301,19 @@ function MoviePoster({ plot, openaiEnabled = false }) {
                             <p>Directed by MICHAEL BAY | Written by CHRISTOPHER NOLAN</p>
                             <p>COMING SOON</p>
                         </div>
+
+                        {/* Add Generate button for Sora posters */}
+                        {openaiEnabled && useAI && useSora && !isGeneratingImage && (
+                            <div className="generate-poster-btn">
+                                <button
+                                    onClick={generatePosterImage}
+                                    disabled={isGeneratingImage}
+                                    className="generate-btn"
+                                >
+                                    {posterImageUrl ? 'Regenerate Poster' : 'Generate SORA Poster'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </>
             )}
