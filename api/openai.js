@@ -1,5 +1,9 @@
 // file: api/openai.js
 import { OpenAI } from 'openai';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
 
 /**
  * API handler for OpenAI requests
@@ -17,21 +21,30 @@ export default async function handler(request, response) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
         console.error('OPENAI_API_KEY is not set');
-        return response.status(500).json({ error: 'Server configuration error' });
+        return response.status(500).json({ error: 'Server configuration error: API key not set' });
     }
 
     try {
         // Parse the request body
         const { action, params } = request.body;
 
+        if (!action) {
+            return response.status(400).json({ error: 'Action parameter is required' });
+        }
+
+        console.log(`Processing ${action} request with params:`, JSON.stringify(params));
+
         // Initialize OpenAI client
         const openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
+            apiKey: apiKey
         });
 
         // Handle different actions
         let result;
         switch (action) {
+            case 'generateTitle':
+                result = await generateTitle(openai, params);
+                break;
             case 'generateMoviePlot':
                 result = await generateMoviePlot(openai, params);
                 break;
@@ -48,17 +61,70 @@ export default async function handler(request, response) {
                 result = await generateMultipleMovies(openai, params);
                 break;
             default:
-                return response.status(400).json({ error: 'Invalid action' });
+                return response.status(400).json({ error: `Invalid action: ${action}` });
         }
 
         // Return the result
         return response.status(200).json({ result });
     } catch (error) {
         console.error('Error processing OpenAI request:', error);
-        return response.status(500).json({
+
+        // Enhanced error reporting
+        const errorResponse = {
             error: 'Error processing request',
-            message: error.message
+            message: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        };
+
+        if (error.response) {
+            errorResponse.openaiError = {
+                status: error.response.status,
+                statusText: error.response.statusText,
+                data: error.response.data
+            };
+        }
+
+        return response.status(500).json(errorResponse);
+    }
+}
+
+/**
+ * Generate a dynamic title for a Jason Statham movie
+ * @param {Object} openai - OpenAI client instance
+ * @param {Object} elements - Elements to inspire the title
+ * @returns {Promise<string>} - Generated title
+ */
+async function generateTitle(openai, { plotDescription, plotElements }) {
+    const prompt = plotDescription
+        ? `Create an exciting, punchy title for a Jason Statham action movie with this plot: ${plotDescription}`
+        : `Create an exciting, punchy title for a Jason Statham action movie with these elements:
+           - Former profession: ${plotElements.formerProfession || 'special forces'}
+           - Setting: ${plotElements.setting || 'urban environment'}
+           - Villain type: ${plotElements.villain || 'crime syndicate'}
+           - Key theme: ${plotElements.plotTrigger || 'revenge'}`;
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a Hollywood movie title creator specializing in action films. Create short, powerful titles that would work for Jason Statham movies. Respond with ONLY the title, nothing else.'
+                },
+                { role: 'user', content: prompt }
+            ],
+            max_tokens: 30,
+            temperature: 0.7,
         });
+
+        // Clean up any extra formatting or quotes
+        let title = response.choices[0].message.content.trim();
+        title = title.replace(/^["']|["']$/g, ''); // Remove surrounding quotes if present
+
+        return title;
+    } catch (error) {
+        console.error('Error generating title:', error);
+        throw error;
     }
 }
 
@@ -66,21 +132,22 @@ export default async function handler(request, response) {
  * Generate a movie plot using OpenAI
  * @param {Object} openai - OpenAI client instance
  * @param {Object} plotElements - Elements to include in the plot
- * @returns {Promise<string>} - Generated plot
+ * @returns {Promise<Object>} - Generated plot with title
  */
 async function generateMoviePlot(openai, plotElements) {
-    const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-            {
-                role: 'system',
-                content: 'You are a creative film writer specializing in Jason Statham action movies. Create a detailed, entertaining plot summary for a Jason Statham movie that feels authentic to his style. Keep it action-packed, somewhat over-the-top, but still following a coherent narrative. Jason Statham is always the star and hero.'
-            },
-            {
-                role: 'user',
-                content: `Create a full plot summary for a Jason Statham movie with these elements to inspire you:
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a creative film writer specializing in Jason Statham action movies. Create a detailed, entertaining plot summary for a Jason Statham movie that feels authentic to his style. Keep it action-packed, somewhat over-the-top, but still following a coherent narrative. Jason Statham is always the star and hero.'
+                },
+                {
+                    role: 'user',
+                    content: `Create a full plot summary for a Jason Statham movie with these elements to inspire you:
 
-Title: "${plotElements.title}"
+${plotElements.title ? `Title: "${plotElements.title}"` : 'Generate an original title'}
 Setting: ${plotElements.setting}
 Statham's former profession: ${plotElements.formerProfession}
 Statham's current job: ${plotElements.currentJob}
@@ -97,14 +164,41 @@ Final confrontation: ${plotElements.bossFight}
 How the villain is defeated: ${plotElements.bossKill}
 ${plotElements.hasCameo ? `Surprise cameo by: ${plotElements.cameo}` : ''}
 
-Write a complete, cohesive plot summary that incorporates these elements naturally. Make it sound like a real movie synopsis, not just a list of elements. Focus on creating a compelling narrative that showcases Jason Statham's action hero persona.`
-            }
-        ],
-        max_tokens: 750,
-        temperature: 0.8,
-    });
+Write a complete, cohesive plot summary that incorporates these elements naturally. Make it sound like a real movie synopsis, not just a list of elements. Focus on creating a compelling narrative that showcases Jason Statham's action hero persona.
 
-    return response.choices[0].message.content.trim();
+${!plotElements.title ? 'Also, suggest a dynamic, punchy title for this movie at the beginning of your response prefixed with "TITLE: "' : ''}
+`
+                }
+            ],
+            max_tokens: 1000,
+            temperature: 0.8,
+        });
+
+        const content = response.choices[0].message.content.trim();
+
+        // Extract title if none was provided
+        let title = plotElements.title;
+        let plot = content;
+
+        if (!title) {
+            const titleMatch = content.match(/^TITLE:\s*(.+?)(?:\n|$)/i);
+            if (titleMatch) {
+                title = titleMatch[1].trim();
+                plot = content.replace(/^TITLE:\s*.+?(?:\n|$)/i, '').trim();
+            } else {
+                // If no title format found, generate one separately
+                title = await generateTitle(openai, { plotDescription: content });
+            }
+        }
+
+        return {
+            title: title,
+            plot: plot
+        };
+    } catch (error) {
+        console.error('Error generating plot:', error);
+        throw error;
+    }
 }
 
 /**
@@ -117,12 +211,13 @@ Write a complete, cohesive plot summary that incorporates these elements natural
  * @returns {Promise<string>} - Generated trailer script
  */
 async function generateMovieTrailer(openai, plotElements) {
-    const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-            {
-                role: 'system',
-                content: `You are Don LaFontaine, the legendary movie trailer voice-over artist known for iconic phrases like "In a world..."
+    try {
+        const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are Don LaFontaine, the legendary movie trailer voice-over artist known for iconic phrases like "In a world..."
 Create an engaging, dramatic trailer script for a Jason Statham action movie.
 
 Guidelines for an authentic movie trailer script:
@@ -135,12 +230,12 @@ Guidelines for an authentic movie trailer script:
 - End with the movie title and a powerful tagline
 - Include text that indicates how certain words should be delivered (whispered, shouted, etc.)
 - The script should be immediately ready for voice recording`
-            },
-            {
-                role: 'user',
-                content: `Create a dramatic movie trailer voice-over script for a Jason Statham film titled "${plotElements.title}" with these elements:
+                },
+                {
+                    role: 'user',
+                    content: `Create a dramatic movie trailer voice-over script for a Jason Statham film titled "${plotElements.title}" with these elements:
 
-Plot summary: ${plotElements.summary || "Use the plot elements below to craft a cohesive narrative"}
+Plot summary: ${plotElements.plot || plotElements.summary || "Use the plot elements below to craft a cohesive narrative"}
 Setting: ${plotElements.setting}
 Statham's background: Former ${plotElements.formerProfession}, now ${plotElements.currentJob}
 Main conflict: ${plotElements.plotTrigger}
@@ -151,37 +246,44 @@ Final confrontation: ${plotElements.bossFight}
 ${plotElements.hasCameo ? `Special appearance by: ${plotElements.cameo}` : ''}
 
 Write ONLY the trailer voice-over narration script as it would be performed by Don LaFontaine. Format it so it's instantly ready for voice recording, with indications for dramatic pauses, emphasis, and tone.`
-            }
-        ],
-        max_tokens: 350,
-        temperature: 0.7,
-    });
+                }
+            ],
+            max_tokens: 500,
+            temperature: 0.7,
+        });
 
-    return response.choices[0].message.content.trim();
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.error('Error generating trailer script:', error);
+        throw error;
+    }
 }
 
 /**
  * Generate a poster description using OpenAI
  * @param {Object} openai - OpenAI client instance
- * @param {Object} plot - Plot elements
- * @param {string} style - Poster style (action, artsy, vintage)
+ * @param {Object} params - Plot elements and style
  * @returns {Promise<string>} - Generated poster description
  */
-async function generatePosterDescription(openai, { plot, style }) {
-    const { title, formerProfession, setting, villain, hasCameo, cameo } = plot;
+async function generatePosterDescription(openai, params) {
+    try {
+        const { plot, style } = params;
+        const { title, formerProfession, setting, villain, hasCameo, cameo, plot: plotText, summary } = plot;
 
-    const styleDescriptions = {
-        action: 'high-contrast with dramatic lighting, typically featuring blues and oranges, with explosions, action poses, and urban environments',
-        artsy: 'minimalist, artistic approach with bold colors, negative space, symbolic imagery, and artistic representation rather than literal',
-        vintage: 'retro style with grainy textures, faded colors, and a 1970s-80s aesthetic reminiscent of classic action movie posters'
-    };
+        const styleDescriptions = {
+            action: 'high-contrast with dramatic lighting, typically featuring blues and oranges, with explosions, action poses, and urban environments',
+            artsy: 'minimalist, artistic approach with bold colors, negative space, symbolic imagery, and artistic representation rather than literal',
+            vintage: 'retro style with grainy textures, faded colors, and a 1970s-80s aesthetic reminiscent of classic action movie posters'
+        };
 
-    const prompt = `Create a two-part movie poster description for an action film titled "${title}" starring Jason Statham.
+        const prompt = `Create a two-part movie poster description for an action film titled "${title}" starring Jason Statham.
 
 Part 1: Write a single powerful tagline for the poster (one sentence).
 
 Part 2: Describe in detail what the poster would look like in a ${style} style.
 The poster should be ${styleDescriptions[style]}.
+
+Summary of the movie: ${plotText || summary || ''}
 
 Include these elements:
 - Jason Statham as a former ${formerProfession}
@@ -191,47 +293,60 @@ ${hasCameo ? `- Include ${cameo} in the poster` : ''}
 
 For Part 2, be specific about visual elements, composition, positioning, color scheme, and atmosphere. Describe how Jason Statham is portrayed, what he's doing, what weapons or props are visible, and how the title is displayed. Make it detailed enough that someone could visualize and create this poster.`;
 
-    const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [{
-            role: 'user',
-            content: prompt
-        }],
-        temperature: 0.7,
-        max_tokens: 400
-    });
+        const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{
+                role: 'user',
+                content: prompt
+            }],
+            temperature: 0.7,
+            max_tokens: 600
+        });
 
-    return response.choices[0].message.content.trim();
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.error('Error generating poster description:', error);
+        throw error;
+    }
 }
 
 /**
  * Generate trailer audio using OpenAI's TTS service
  * @param {Object} openai - OpenAI client instance
- * @param {string} trailerText - Trailer script text
+ * @param {Object} params - Parameters including trailer text
  * @returns {Promise<string>} - Base64-encoded audio data
  */
-async function generateTrailerAudio(openai, { trailerText }) {
-    // Prepare the script for TTS by cleaning up any formatting
-    let script = trailerText;
-
-    // Replace common formatting patterns for better speech synthesis
-    script = script.replace(/\[([^\]]+)\]/g, ''); // Remove sound effect indicators
-    script = script.replace(/\(([^)]+)\)/g, ''); // Remove direction notes
-    script = script.replace(/\*([^*]+)\*/g, '$1'); // Remove asterisks but keep text
-
-    // Add appropriate pauses
-    script = script.replace(/\.\.\./g, ' <break time="1s"/> ');
-    script = script.replace(/\./g, '. <break time="0.5s"/> ');
-
-    // Truncate if needed (TTS-1 has a character limit)
-    const maxLength = 4000;
-    if (script.length > maxLength) {
-        script = script.substring(0, maxLength) + '...';
-    }
-
+async function generateTrailerAudio(openai, params) {
     try {
+        // Extract the trailer text
+        const { trailerText } = params;
+        if (!trailerText || typeof trailerText !== 'string') {
+            throw new Error('Invalid or missing trailer text');
+        }
+
+        // Prepare the script for TTS by cleaning up any formatting
+        let script = trailerText;
+
+        // Replace common formatting patterns for better speech synthesis
+        script = script.replace(/\[([^\]]+)\]/g, ''); // Remove sound effect indicators
+        script = script.replace(/\(([^)]+)\)/g, ''); // Remove direction notes
+        script = script.replace(/\*([^*]+)\*/g, '$1'); // Remove asterisks but keep text
+
+        // Add appropriate pauses
+        script = script.replace(/\.\.\./g, ' <break time="1s"/> ');
+        script = script.replace(/\./g, '. <break time="0.5s"/> ');
+
+        // Truncate if needed (TTS-1 has a character limit)
+        const maxLength = 3000; // Reduced to be safe
+        if (script.length > maxLength) {
+            console.warn(`Trailer script too long (${script.length} chars), truncating to ${maxLength}`);
+            script = script.substring(0, maxLength) + '...';
+        }
+
+        console.log('Sending TTS request with script length:', script.length);
+
         const response = await openai.audio.speech.create({
-            model: 'tts-1-hd', // Use HD model for better quality
+            model: 'tts-1', // Use standard TTS as HD might cause issues
             voice: 'onyx', // Deep, dramatic voice perfect for movie trailers
             input: script,
             response_format: 'mp3',
@@ -252,14 +367,21 @@ async function generateTrailerAudio(openai, { trailerText }) {
 /**
  * Generate multiple movie plots for studio mode
  * @param {Object} openai - OpenAI client instance
- * @param {number} count - Number of movies to generate
+ * @param {Object} params - Parameters with count of movies to generate
  * @returns {Promise<Array>} - Array of generated movies
  */
-async function generateMultipleMovies(openai, { count }) {
-    const prompt = `Generate ${count} unique action movie concepts starring Jason Statham.
+async function generateMultipleMovies(openai, params) {
+    try {
+        const { count } = params;
+
+        if (!count || typeof count !== 'number' || count < 1 || count > 5) {
+            throw new Error('Invalid count parameter: must be a number between 1 and 5');
+        }
+
+        const prompt = `Generate ${count} unique and original action movie concepts starring Jason Statham.
 
 For each movie, include:
-1. Title
+1. Title (creative and original - avoid sequels to existing franchises)
 2. A brief plot summary (2-3 sentences)
 3. Character: what former profession Jason Statham's character had
 4. Setting: where the main action takes place
@@ -276,25 +398,40 @@ Format each movie as a JSON object like this:
   "actionScene": "Description of key action scene"
 }
 
-Return the results as a valid JSON array of these objects.`;
+Return the results as a JSON array of these objects.`;
 
-    const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [{
-            role: 'user',
-            content: prompt
-        }],
-        temperature: 0.8,
-        max_tokens: 800,
-        response_format: { type: "json_object" }
-    });
+        const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{
+                role: 'user',
+                content: prompt
+            }],
+            temperature: 0.8,
+            max_tokens: 1000,
+            response_format: { type: "json_object" }
+        });
 
-    // Parse the response and return the array of movies
-    try {
-        const jsonResponse = JSON.parse(response.choices[0].message.content);
-        return jsonResponse.movies || [];
-    } catch (err) {
-        console.error('Error parsing JSON response:', err);
-        return [];
+        // Parse the response
+        try {
+            const content = response.choices[0].message.content;
+            const jsonResponse = JSON.parse(content);
+
+            // Check if the response has the expected structure
+            if (Array.isArray(jsonResponse)) {
+                return jsonResponse;
+            } else if (jsonResponse.movies && Array.isArray(jsonResponse.movies)) {
+                return jsonResponse.movies;
+            } else {
+                console.error('Unexpected JSON structure:', jsonResponse);
+                return [];
+            }
+        } catch (err) {
+            console.error('Error parsing JSON response:', err);
+            console.error('Raw response:', response.choices[0].message.content);
+            return [];
+        }
+    } catch (error) {
+        console.error('Error generating multiple movies:', error);
+        throw error;
     }
 }
