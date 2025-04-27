@@ -7,13 +7,40 @@ import {
 } from '../services/openaiService';
 
 /**
+ * @typedef {Object} PlotElements
+ * @property {string} title - The title of the movie
+ * @property {string} setting - The setting where the movie takes place
+ * @property {string} formerProfession - Jason Statham's former profession
+ * @property {string} currentJob - Jason Statham's current job
+ * @property {string} plotTrigger - Event that triggers the plot
+ * @property {string} villain - Main villain description
+ * @property {string} villainGroup - Secondary villain group
+ * @property {string} sidekick - Description of sidekick character
+ * @property {string} plotTwist - Plot twist description
+ * @property {string} vehicle - Vehicle used in the movie
+ * @property {string} weapon - Weapon used in the movie
+ * @property {string} actionScene - Description of a key action scene
+ * @property {string} villainHideout - Villain's hideout location
+ * @property {string} bossFight - Description of final boss fight
+ * @property {string} bossKill - How the boss is defeated
+ * @property {boolean} hasCameo - Whether the movie includes a cameo
+ * @property {string} cameo - Description of the cameo character
+ * @property {string} [trailer] - Trailer script for the movie
+ * @property {string|Object} [summary] - Plot summary or AI response object
+ */
+
+/**
+ * @typedef {Object} MoviePlotProps
+ * @property {function(PlotElements): void} [onPlotGenerated] - Callback when plot is generated
+ * @property {boolean} [studioMode] - Whether component is in studio mode
+ * @property {boolean} [openaiEnabled] - Whether OpenAI features are enabled
+ */
+
+/**
  * Component for generating and displaying movie plots and trailers
  *
- * @param {Object} props - Component props
- * @param {Function} props.onPlotGenerated - Callback when plot is generated
- * @param {boolean} props.studioMode - Whether component is in studio mode
- * @param {boolean} props.openaiEnabled - Whether OpenAI features are enabled
- * @returns {JSX.Element} - React component
+ * @param {MoviePlotProps} props - Component props
+ * @returns {React.ReactElement} - React component
  */
 function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false }) {
     const [plot, setPlot] = useState(null);
@@ -239,9 +266,16 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                 if (typeof aiPlot === 'string') {
                     setAiGeneratedPlot(aiPlot);
                     return { plot: aiPlot, title: plotElements.title };
-                } else {
-                    setAiGeneratedPlot(aiPlot.plot);
+                } else if (aiPlot && typeof aiPlot === 'object') {
+                    // Using an explicit type check with a safer approach to check properties
+                    const hasPlotProperty = Object.prototype.hasOwnProperty.call(aiPlot, 'plot');
+                    const plotContent = hasPlotProperty ? aiPlot['plot'] : String(aiPlot);
+                    setAiGeneratedPlot(plotContent);
                     return aiPlot;
+                } else {
+                    // Fallback case
+                    setAiGeneratedPlot(String(aiPlot));
+                    return { plot: String(aiPlot), title: plotElements.title };
                 }
             }
 
@@ -289,7 +323,8 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
             bossFight: random(fallbackElements.bossFights),
             bossKill: hardcoreMode ? random(fallbackElements.bossKills) : "defeated in an epic showdown",
             hasCameo,
-            cameo: hasCameo ? random(fallbackElements.cameos) : ''
+            cameo: hasCameo ? random(fallbackElements.cameos) : '',
+            title: '' // Initialize the title property
         };
 
         try {
@@ -310,6 +345,7 @@ function MoviePlot({ onPlotGenerated, studioMode = false, openaiEnabled = false 
                         ...plotElements,
                         ...(aiContent.title ? { title: aiContent.title } : {}),
                         summary: aiContent.plot || aiContent,
+                        trailer: '', // Initialize the trailer property
                     };
 
                     setPlot(fullPlot);
