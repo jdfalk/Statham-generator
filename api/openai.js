@@ -390,11 +390,13 @@ async function generateMultipleMovies(openai, params) {
     try {
         const { count } = params;
 
-        if (!count || typeof count !== 'number' || count < 1 || count > 5) {
+        // Validate count parameter
+        const movieCount = Number(count);
+        if (isNaN(movieCount) || movieCount < 1 || movieCount > 5) {
             throw new Error('Invalid count parameter: must be a number between 1 and 5');
         }
 
-        const prompt = `Generate ${count} unique and original action movie concepts starring Jason Statham.
+        const prompt = `Generate ${movieCount} unique and original action movie concepts starring Jason Statham.
 
 For each movie, include:
 1. Title (creative and original - avoid sequels to existing franchises)
@@ -429,25 +431,58 @@ Return the results as a JSON array of these objects.`;
 
         // Parse the response
         try {
-            const content = response.choices[0].message.content;
-            const jsonResponse = JSON.parse(content);
+            const content = response.choices[0].message.content.trim();
+            console.log('Raw response from OpenAI:', content);
 
-            // Check if the response has the expected structure
+            // Try to parse the JSON response
+            let jsonResponse;
+            try {
+                jsonResponse = JSON.parse(content);
+            } catch (parseError) {
+                // Try to extract JSON from the response if it's not valid JSON
+                const jsonMatch = content.match(/(\[[\s\S]*\])|(\{[\s\S]*\})/);
+                if (jsonMatch) {
+                    jsonResponse = JSON.parse(jsonMatch[0]);
+                } else {
+                    throw parseError;
+                }
+            }
+
+            // Handle different response formats
             if (Array.isArray(jsonResponse)) {
                 return jsonResponse;
             } else if (jsonResponse.movies && Array.isArray(jsonResponse.movies)) {
                 return jsonResponse.movies;
             } else {
+                // If we get an object with properties like title, plot, etc., wrap it in an array
+                if (jsonResponse.title && jsonResponse.plot) {
+                    return [jsonResponse];
+                }
+
+                // Try to extract movie objects from the response
+                const movies = [];
+                for (const key in jsonResponse) {
+                    if (typeof jsonResponse[key] === 'object' && jsonResponse[key].title) {
+                        movies.push(jsonResponse[key]);
+                    }
+                }
+
+                if (movies.length > 0) {
+                    return movies;
+                }
+
                 console.error('Unexpected JSON structure:', jsonResponse);
+                // Return at least an empty array to avoid null reference errors
                 return [];
             }
         } catch (err) {
             console.error('Error parsing JSON response:', err);
             console.error('Raw response:', response.choices[0].message.content);
+            // Return at least an empty array to avoid null reference errors
             return [];
         }
     } catch (error) {
         console.error('Error generating multiple movies:', error);
-        throw error;
+        throw new Error(`Failed to generate movies: ${error.message || 'Unknown error'}`);
     }
 }
