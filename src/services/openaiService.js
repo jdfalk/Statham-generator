@@ -45,44 +45,44 @@ export const generateMoviePlot = async (plotElements) => {
     if (!openai) return null;
 
     try {
-        const { title, formerProfession, currentJob, plotTrigger, setting,
-                villain, villainGroup, sidekick, plotTwist, vehicle,
-                weapon, actionScene, villainHideout, bossFight,
-                bossKill, hasCameo, cameo } = plotElements;
-
-        const prompt = `Write a complete, coherent, and natural 3-4 paragraph movie plot summary for an action film titled "${title}" starring Jason Statham.
-
-Use these plot elements to craft a compelling story:
-- Jason Statham plays a former ${formerProfession} who now works as a ${currentJob}
-- The inciting incident is: ${plotTrigger}
-- The setting is: ${setting}
-- The main villain is: ${villain}
-- Criminal organization involved: ${villainGroup}
-- Jason Statham's sidekick is: ${sidekick}
-- Major plot twist: ${plotTwist}
-- Featured vehicle: ${vehicle}
-- Featured weapon: ${weapon}
-- Key action scene: ${actionScene}
-- Villain's hideout: ${villainHideout}
-- Final confrontation: ${bossFight}
-- How the villain is defeated: ${bossKill}
-${hasCameo ? `- Special cameo by: ${cameo}` : ''}
-
-Write in the style of a professional movie synopsis that sounds like it would appear on a streaming service. Focus on creating a cohesive, exciting narrative that feels like a real Jason Statham movie. Do not include "In this film..." or similar phrases. Just write the plot summary directly.`;
-
         const response = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
-            messages: [{
-                role: 'user',
-                content: prompt
-            }],
-            temperature: 0.7,
-            max_tokens: 500
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a creative film writer specializing in Jason Statham action movies. Create a detailed, entertaining plot summary for a Jason Statham movie that feels authentic to his style. Keep it action-packed, somewhat over-the-top, but still following a coherent narrative. Jason Statham is always the star and hero.'
+                },
+                {
+                    role: 'user',
+                    content: `Create a full plot summary for a Jason Statham movie with these elements to inspire you:
+
+Title: "${plotElements.title}"
+Setting: ${plotElements.setting}
+Statham's former profession: ${plotElements.formerProfession}
+Statham's current job: ${plotElements.currentJob}
+Plot trigger: ${plotElements.plotTrigger}
+Main villain: ${plotElements.villain}
+Villain's organization: ${plotElements.villainGroup}
+Statham's sidekick: ${plotElements.sidekick}
+Plot twist: ${plotElements.plotTwist}
+Featured vehicle: ${plotElements.vehicle}
+Signature weapon: ${plotElements.weapon}
+Key action scene: ${plotElements.actionScene}
+Villain's hideout: ${plotElements.villainHideout}
+Final confrontation: ${plotElements.bossFight}
+How the villain is defeated: ${plotElements.bossKill}
+${plotElements.hasCameo ? `Surprise cameo by: ${plotElements.cameo}` : ''}
+
+Write a complete, cohesive plot summary that incorporates these elements naturally. Make it sound like a real movie synopsis, not just a list of elements. Focus on creating a compelling narrative that showcases Jason Statham's action hero persona.`
+                }
+            ],
+            max_tokens: 750,
+            temperature: 0.8,
         });
 
         return response.choices[0].message.content.trim();
     } catch (error) {
-        console.error('Error generating movie plot:', error);
+        console.error('Error generating plot with OpenAI:', error);
         return null;
     }
 };
@@ -96,41 +96,36 @@ export const generateMovieTrailer = async (plotElements) => {
     if (!openai) return null;
 
     try {
-        const { title, formerProfession, plotTrigger, villain,
-                plotTwist, actionScene, hasCameo, cameo } = plotElements;
-
-        const prompt = `Write a dramatic movie trailer script for an action film titled "${title}" starring Jason Statham.
-
-The trailer should follow this format:
-- Start with dramatic intro phrases like "THIS SUMMER..." or "IN A WORLD..."
-- Include short, impactful descriptions of the premise
-- Add 2-3 dialogue lines from Jason Statham's character (in quotes)
-- Include dramatic one-liners describing the action
-- End with a title card and release info
-
-Key elements to include:
-- Jason Statham plays a former ${formerProfession}
-- The inciting incident: ${plotTrigger}
-- The main villain: ${villain}
-- Major plot twist: ${plotTwist}
-- Key action scene: ${actionScene}
-${hasCameo ? `- Special cameo by: ${cameo}` : ''}
-
-Write in the style of a Hollywood action movie trailer with dramatic pauses, impactful short statements, and intense tone. Format with separate lines for each phrase or section.`;
-
         const response = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
-            messages: [{
-                role: 'user',
-                content: prompt
-            }],
-            temperature: 0.8,
-            max_tokens: 350
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a Hollywood trailer script writer specializing in intense, dramatic action movie trailers featuring Jason Statham. Create a script for a trailer voice-over that captures the essence of a Jason Statham movie - gritty, action-packed, and dramatic. Use the classic trailer voice style with punchy sentences and dramatic pauses.'
+                },
+                {
+                    role: 'user',
+                    content: `Create a movie trailer script for a Jason Statham film titled "${plotElements.title}" with these elements:
+
+Plot summary: ${plotElements.summary || "Use the plot elements below to craft a cohesive narrative"}
+Setting: ${plotElements.setting}
+Statham's background: ${plotElements.formerProfession}, now ${plotElements.currentJob}
+Main conflict: ${plotElements.plotTrigger}
+Villain: ${plotElements.villain} and their ${plotElements.villainGroup}
+Key action: ${plotElements.actionScene}
+Plot twist: ${plotElements.plotTwist}
+Final confrontation: ${plotElements.bossFight}
+
+Write only the trailer voice-over narration script. Make it dramatic, intense, and highlight Jason Statham's character. Include classic trailer phrases like "In a world where..." or "One man..." if appropriate. Keep it under 200 words.`
+                }
+            ],
+            max_tokens: 350,
+            temperature: 0.7,
         });
 
         return response.choices[0].message.content.trim();
     } catch (error) {
-        console.error('Error generating movie trailer:', error);
+        console.error('Error generating trailer with OpenAI:', error);
         return null;
     }
 };
